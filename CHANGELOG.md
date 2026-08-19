@@ -1,0 +1,308 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- Add a basic Textual application shell launched by the bare `spex` command.
+- Add a placeholder health indicator to the Textual shell.
+- Define the Bluesky Jetstream v2 pipeline premise and component architecture.
+- Add project documentation for designs, decisions, research, reviews, and open work.
+- Add ADR, TDD, and changelog templates.
+- Add technical research and code-review report templates.
+- Document the Jetstream v2 commit envelope and canonical record schemas for posts, reposts, likes, blocks, and follows.
+- Research Python-native process orchestration and task-pool options for Spex.
+- Separate structural architecture, process control, pipeline data flow, and verification into focused design documents.
+- Define the walking skeleton around one live post, service health, post-text transformation, and a Streamlit posts table.
+- Add post counts by DID to the walking-skeleton dashboard and retain public Jetstream fields locally without anonymization.
+- Extend the walking skeleton through live and backfill ingestion, using an environment variable for the test archive credential.
+
+### Changed
+
+- Run blocking process and connection supervision through Textual thread workers with thread-safe UI messaging.
+- Define the Textual application as the unified user interface and process orchestrator.
+- Select direct `multiprocessing.Process` supervision for named application services.
+- Select a direct `spex` application entry point and internal orchestration without Typer or structured headless commands.
+- Define the intended users, portfolio objective, and personal data-exploration use case.
+- Assign repository lifecycle, commit, and GitHub push responsibilities to Codex.
+- Require confirmed information in documentation templates and surface unknown details for discussion.
+- Define `uv` deployment for Linux, Windows, and macOS.
+- Ask comprehensive related project questions in numbered groups for reference.
+- Define Spex as one packaged, multi-process application containing every logical component.
+- Assign backfill, live ingestion, validation and transformation, Streamlit, and Textual TUI to five processes.
+- Place Typer orchestration alongside the Textual TUI.
+- Select `multiprocessing.connection` with `AF_UNIX` and `AF_PIPE` for inter-process communication.
+- Require a lock file to prevent duplicate process instances.
+- Classify cross-platform lock-file implementation as an open research and design decision.
+- Define `spex` as the complete application start command.
+- Define `uv tool install spex` as the installation command.
+- Use the Jetstream service over WebSocket for live ingestion and HTTP/XRPC for historical backfill.
+- Document the Jetstream v2 HTTP/XRPC archive, WebSocket stream, sequence cursors, filters, and delivery guarantees.
+- Clarify Jetstream backfill scope and hosted-service availability.
+- Track archive probing and timeframe-to-sequence mapping as protocol research.
+- Select and probe the Jetstream v2 US East host.
+- Use the Textual TUI to collect the Jetstream archive bearer credential.
+- Persist the Jetstream archive bearer credential between runs.
+- Research native cross-platform credential stores and Python `keyring`.
+- Evaluate encrypted on-disk credential storage and key-management tradeoffs.
+- Define WSL as a distinct credential-storage environment and document its native and bridged keyring options.
+- Define Arch Linux as the WSL development distribution and document its Secret Service requirements.
+- Select a master-password-protected encrypted file for portable credential persistence.
+- Request the master password only when starting a backfill that needs the stored archive credential.
+- Retain the unlocked archive credential for the complete backfill session, including automatic retries.
+- Use controlled replay of stored Jetstream data for scale testing under the 100 Mbps development-network constraint.
+- Use captured Jetstream events as the shared corpus for data profiling and scale testing.
+- Keep large captured event datasets outside Git and version their reproducibility documentation.
+- Use `platformdirs` to resolve cross-platform per-user application-data directories.
+- Define JSON Lines and SQLite in WAL mode as benchmark candidates for ephemeral raw-event retention.
+- Make raw events eligible for deletion after confirmed consumption into the DuckLake data mart.
+- Send live and backfill events to one logical raw store while permitting out-of-order arrivals.
+- Separate live and backfill JSON Lines files and align file rotation with downstream batch sizing.
+- Preserve duplicate arrivals in raw retention and remove them during data-mart ingestion.
+- Document Jetstream sequence numbers as the protocol-supported deduplication candidate within one server instance.
+- Fix Spex ingestion to `jetstream.us-east.bsky.network` without alternate-host configuration.
+- Order events by Jetstream sequence during data-mart insertion.
+- Scope Jetstream sequence ordering to each data-mart insertion batch.
+- Preserve every distinct operation for a logical record in the data mart for historical analysis.
+- Provide a current-state projection derived from preserved mutation history.
+- Resolve current state at query time unless performance evidence justifies materialization.
+- Select `(DID, collection, rkey, rev)` as the natural key for commit-record mutations.
+- Retain commit events in the data mart and exclude identity, account, and sync events.
+- Request posts, reposts, likes, blocks, and follows through Jetstream commit and collection filters.
+- Collect the selected record collections from every available DID.
+- Preserve mutation history within a configured data-mart retention period.
+- Default data-mart retention to 24 hours and allow user configuration.
+- Measure data-mart retention from the Jetstream event timestamp.
+- Restrict backfill events to the configured data-mart retention window.
+- Allow any user-selected retention period and warn that Jetstream archive availability varies.
+- Configure and persist the data-mart retention period through the Textual TUI.
+- Apply retention reductions immediately and warn about deletion of existing data.
+- Require explicit confirmation before applying a retention reduction.
+- Offer to backfill the newly included timeframe after a retention increase.
+- Apply increased retention even when the user declines the offered backfill.
+- Run routine data-mart retention cleanup on a schedule outside the insertion path.
+- Set routine data-mart retention cleanup to run hourly.
+- Run data-mart retention cleanup at application startup.
+- Make the recurring cleanup interval user-configurable with an hourly default.
+- Configure the cleanup interval through the TUI with a performance-impact warning.
+- Persist the cleanup interval between application sessions.
+- Retry failed retention cleanup before the next scheduled run.
+- Make four retention-cleanup retry attempts with exponential backoff.
+- Define cleanup retry indices `0` through `3` with delays of `2 ** retry_index`.
+- Measure cleanup retry delays in seconds.
+- Continue startup in a degraded state when startup cleanup exhausts its retries.
+- Keep cleanup failure visible in the TUI until a later cleanup succeeds.
+- Provide a manual cleanup retry action in the TUI.
+- Apply the standard four-retry backoff policy to manual cleanup requests.
+- Define current state as a rolling-window projection over retained mutations.
+- Omit records whose latest retained operation is a delete from current state while preserving delete history.
+- Select current state by the highest Jetstream sequence for each logical record.
+- Support original-timing and configurable accelerated replay of captured events.
+- Scope captured-event replay to development and benchmarking tooling outside the packaged application.
+- Route development replay through the production raw-ingestion boundary.
+- Isolate replay benchmarks from the normal DuckLake data mart.
+- Start every replay run with a fresh isolated data mart.
+- Remove the isolated replay data mart after each completed run.
+- Remove isolated replay data marts after failed and interrupted runs.
+- Persist benchmark summaries independently of disposable replay data marts.
+- Add `docs/benchmarks` for selected reproducible portfolio evidence.
+- Generate committed benchmark summaries from measured run data and environment metadata.
+- Generate portfolio summaries only for benchmark runs explicitly selected for publication.
+- Keep local benchmark results without automatic expiration.
+- Keep development benchmark results outside the `platformdirs` application-data layout.
+- Store local benchmark results in a project-scoped, Git-ignored directory.
+- Use root-level `benchmarks/` for local results and reserve `docs/benchmarks/` for committed summaries.
+- Store local benchmark results and generated portfolio summaries as Markdown.
+- Launch the Textual TUI/Typer process and Streamlit dashboard when `spex` starts.
+- Start pipeline worker processes through TUI controls.
+- Start validation and transformation automatically with live ingestion or backfill.
+- Drain pending raw events before validation and transformation stop.
+- Bound graceful validation-and-transformation draining with a timeout.
+- Select the graceful-drain timeout from representative profiling evidence.
+- After a drain timeout, commit the in-flight batch and stop before starting another batch.
+- Leave shutdown batch commits without a hard timeout pending test evidence.
+- Preserve failed shutdown batches in raw retention and report degraded health.
+- Retry a failed in-flight batch commit before stopping the worker.
+- Standardize every retrying operation on four retries with 1, 2, 4, and 8-second delays.
+- Treat schema-validation failures as non-retryable invalid records.
+- Store invalid records with their full payload in a rejected-record table.
+- Store validation error details with each rejected record.
+- Stop validation at the first detected schema error.
+- Apply the data-mart retention period and cleanup schedule to rejected records.
+- Store transformation failures in the rejected-record table after standard retries exhaust.
+- Show rejected-record counts by validation and transformation failure in TUI health.
+- Scope TUI rejected-record counts to currently retained rows.
+- Limit the TUI to configuration, controls, and aggregate operational health.
+- Restart crashed pipeline workers with the standard retry policy.
+- Continue in degraded health and provide manual worker restart after automatic attempts exhaust.
+- Keep services operationally independent and retain ingestion during downstream outages.
+- Pause ingestion at raw-retention capacity instead of intentionally dropping events.
+- Configure raw-retention capacity through the TUI as the primary product configuration surface.
+- Persist raw-retention capacity between application sessions.
+- Express raw-retention capacity as an absolute size and show available disk space in the TUI.
+- Default raw-retention capacity to 1 GiB.
+- Rotate JSON Lines raw files at 100 MiB and resume paused ingestion after 100 MiB of capacity is free.
+- Require at least 400 MiB of raw-retention capacity for live and backfill temporary and completed files.
+- Publish immutable completed JSON Lines files through atomic rename.
+- Restrict validation and transformation to completed JSON Lines files.
+- Keep active JSON Lines files open until they reach 100 MiB without time-based publication.
+- Publish non-empty partial JSON Lines files during graceful ingestion shutdown.
+- Recover crashed JSON Lines writers by removing an incomplete trailing line and resuming append.
+- Advance the Jetstream checkpoint after each complete JSON Lines record while preserving record-before-checkpoint durability.
+- Select per-line or grouped durable sync from throughput benchmarks.
+- Rewind crash recovery to the active raw file's oldest Jetstream checkpoint and deduplicate replay downstream.
+- Store each active raw file's oldest Jetstream checkpoint in sidecar metadata.
+- Encode active-file checkpoint sidecars as JSON.
+- Record the owning ingestion service and creation timestamp in each checkpoint sidecar.
+- Persist a JSON state artifact per ingestion service with the open temporary filename and last written filename.
+- Update ingestion-state JSON artifacts through same-directory atomic replacement.
+- Automatically reconstruct missing or corrupt ingestion state and stop only when safe reconstruction fails.
+- Recover the oldest checkpoint from the first complete record in the open temporary file.
+- Recover an empty open file from the final record in the newest completed file.
+- Treat absent service state and raw files as a clean first run.
+- Start clean first-run live ingestion at the oldest available unsealed sequence.
+- Skip first-run unsealed events outside the configured retention window.
+- Replace expired live checkpoints with the current retention-boundary sequence.
+- Report expired checkpoint replacement in TUI operational health.
+- Classify expired checkpoint replacement as a warning.
+- Keep expired-checkpoint warnings visible until user acknowledgment.
+- Always stop Streamlit and all running pipeline workers when the TUI exits.
+- Shut down child processes after an unexpected TUI/orchestrator failure.
+- Detect orchestrator loss through heartbeats on the existing process-control channel.
+- Send heartbeats every 5 seconds and detect parent loss after 15 seconds.
+- Keep heartbeat timing fixed as an internal protocol setting.
+- Use normal graceful worker shutdown after heartbeat loss.
+- Restrict IPC connections to processes running as the same operating-system user.
+- Generate a new random IPC authentication key for each application session.
+- Report IPC connection loss separately from process failure.
+- Keep each session IPC authentication key in memory and pass it directly to child processes.
+- Route service control communication through the orchestrator as a hub.
+- Retry IPC reconnection with the standard policy, then require manual restart from degraded status.
+- Serialize IPC messages as UTF-8 JSON bytes without pickle deserialization.
+- Include a fixed protocol version and message type in every IPC message.
+- Correlate command acknowledgments through unique request IDs.
+- Reject protocol-version mismatches and mark the affected service degraded.
+- Send separate accepted and completed responses for IPC commands.
+- Return recorded results for duplicate request IDs without repeating commands.
+- Keep the request-result ledger under orchestrator ownership across worker restarts.
+- Do not retry a command automatically when its accepted response is missing.
+- Mark commands without an accepted response as unknown and allow manual same-ID retry.
+- Store the complete durable request-result ledger in SQLite under the `platformdirs` application-data directory.
+- Limit request-ledger records to message IDs and statuses without command payloads, results, or secrets.
+- Clean the request ledger at application startup and on the recurring hourly cleanup schedule.
+- Delete session-ledger records during clean TUI shutdown and discard interrupted-session records at startup.
+- Delete active-session ledger records after one hour.
+- Wait one second for command acceptance before marking the command unknown.
+- Use command-specific completion timeouts.
+- Keep manual retry available after request-ledger expiration.
+- Allow direct manual retry after ledger expiration without additional confirmation.
+- Mark completion timeouts unknown and allow manual same-ID retry.
+- Select command-specific completion timeouts through profiling.
+- Store message ID, status, creation time, and last-update time in each request-ledger row.
+- Represent command failure with a distinct failed status.
+- Complete commands only after confirming the requested service state.
+- Track commands through pending, accepted, completed, failed, and unknown states.
+- Store ledger timestamps as UTC Unix time in microseconds.
+- Send failure details to logs and TUI health while keeping the ledger status-only.
+- Treat completed and failed command states as terminal.
+- Assign a new request ID when retrying a failed command.
+- Reconcile late completion from unknown to completed and remove its retry action.
+- Reconcile late acceptance from unknown to accepted and restart the completion timer.
+- Reconcile late failure from unknown to terminal failed and remove its retry action.
+- Start command dispatch and pending ledger insertion concurrently as asynchronous operations.
+- Mark a durably recorded request failed when command dispatch fails.
+- Start a replacement pending-ledger write when dispatch succeeds and the first ledger insertion fails.
+- Retry replacement ledger writes with the standard policy and persist the latest known status.
+- Retry failed command dispatch automatically with the same request ID and sequence.
+- Apply the standard retry policy to automatic dispatch retries.
+- Retain each failed dispatch attempt as an independent minimal ledger row until cleanup.
+- Mark exhausted ledger writes degraded while allowing new and in-flight commands to continue.
+- Clear degraded ledger health after a successful write.
+- Use SQLite WAL mode with the orchestrator as the only request-ledger writer.
+- Apply the standard retry policy to SQLite lock and busy errors.
+- Configure the request ledger with `synchronous=NORMAL` and a SQLite busy timeout.
+- Rely on SQLite automatic WAL checkpointing.
+- Replace the prior ledger at startup without an integrity check.
+- Restrict ledger-file access to the current operating-system user.
+- Version the request-ledger schema for migrations.
+- Delete expired ledger rows in one transaction.
+- Discard runtime-corrupt ledgers, recreate them automatically, and report degraded health until a write succeeds.
+- Use a five-second SQLite busy timeout.
+- Accept recent ledger loss after power failure because startup creates a fresh ledger.
+- Permanently replace the ledger, WAL, and shared-memory files at startup.
+- Recreate the ledger when its schema version differs.
+- Set ledger-file mode to `0600` on Linux, macOS, and WSL.
+- Retry disk-full and I/O errors with the standard policy while allowing commands to continue in degraded ledger health.
+- Apply the standard retry policy to every retryable operation unless a documented exception applies.
+- Name each request ledger for its application session ID.
+- Set the ledger-directory mode to `0700` on Linux, macOS, and WSL.
+- Retry prior-session ledger deletion and allow a fresh session-named ledger to proceed in degraded health after exhaustion.
+- Generate one UUIDv4 per orchestrator lifetime, retain it across worker restarts, and renew it with a replacement orchestrator.
+- Name every ledger `requests-{timestamp}-{session_id}.sqlite3`.
+- Encode ledger-creation timestamps as compact UTC microseconds.
+- Rely on inherited Windows per-user application-data permissions without a custom ACL.
+- Delete session ledger, WAL, and shared-memory files under the standard retry policy.
+- Recreate corrupt ledgers with the same session ID and a new timestamped filename.
+- Restrict prior-ledger cleanup to validated regular files matching the ledger pattern and refuse symbolic links.
+- Log exhausted ledger-cleanup retries without degrading startup health.
+- Validate ledger timestamps and UUIDs before cleanup, continue after individual failures, and leave malformed or unrelated entries untouched.
+- Log rejected cleanup symlinks and absolute paths for exhausted cleanup failures.
+- Include the orchestrator session ID in IPC messages, worker health, application logs, and TUI health.
+- Pass the session ID directly to child processes and keep ledger rows free of redundant session fields.
+- Reject old-session child connections and terminate orphaned children during orchestrator replacement.
+- Keep canonical lowercase UUIDs and session timestamps internal and non-configurable.
+- Run the Textual TUI, Typer orchestrator, and session owner in one main process.
+- Keep `tui.lock` for the main process and identify its role as `orchestrator`.
+- Record PID, session ID, role, and start time in every process lock.
+- Discover orphans through all child locks, allow the 15-second heartbeat window, then force termination.
+- Use `SIGKILL` on Unix-like systems and `TerminateProcess` on Windows for orphan enforcement.
+- Continue with degraded service health when orphan termination fails and log the cleanup identity and outcome.
+- Give each service process a lifetime instance ID stored in lock metadata and used by the message protocol.
+- Keep lock files stable and write fixed JSON metadata in place after acquisition.
+- Flush and sync lock metadata before process readiness and retry incomplete metadata reads.
+- Use canonical UUIDv4 service-instance IDs, renew them on worker restart, and reuse the session ID for the main process.
+- Include session and service IDs in every service message, operational health, and logs.
+- Associate connections from lock metadata once, reject mismatched service messages, and require restart after unreadable startup metadata.
+- Write lock metadata before IPC connection and validate each service through a lock-backed hello handshake.
+- Cache immutable metadata after successful hello validation.
+- Restart current-session metadata failures through the process handle and require manual intervention for unidentified old-session orphans.
+- Require hello within five seconds, acknowledge validated identity explicitly, and report readiness after acknowledgment.
+- Keep one active connection per service instance, reject duplicates, and reconnect live processes with the same ID.
+- Restart workers after failed hello validation and leave trusted IPC messages without an application size limit.
+- Enforce five-second hello and hello-ack timeouts with restart or reconnection handling.
+- Keep healthy established connections unchanged when rejecting duplicates.
+- Close malformed post-handshake connections, reject unknown schema fields, and respond to unknown message types.
+- Add UTC microsecond timestamps and heartbeat acknowledgments to IPC messages.
+- Use an orchestrator-owned session sequence starting at zero, retain it across reconnections, and reuse request sequences in responses.
+- Keep timestamps informational, omit clock-skew warnings, and tolerate duplicate or skipped sequence values.
+- Treat three consecutive missing heartbeat acknowledgments as connection failure.
+- Require a protocol-version change before adding message fields.
+- Use one synchronized, memory-only orchestrator sequence encoded as a decimal string.
+- Unify message and request IDs as `{session_id}:{sequence}` and reuse them across responses and automatic retries.
+- Keep heartbeat and control-message IDs outside the request ledger.
+- Apply overarching process decisions across governed components without repeated narrower decisions.
+- Defer non-blocking implementation details to implementation, testing, and the project TODO.
+- Plan through progressive decomposition from system structure to components, interfaces, behaviors, and implementation details.
+- Document lifecycle, data, control, shared-resource, external, and failure dependencies in the system architecture.
+- Document logical interface, application-control, pipeline, data, platform, and external-system layers with their dependency rules.
+- Consolidate duplicate design and dependency diagrams into one structural dependency model.
+- Reorder the project TODO into dependency-driven implementation phases and research gates.
+- Separate the implementation roadmap from supporting design decisions and verification tasks.
+- Put a thin captured-post walking skeleton before platform hardening and component expansion.
+- Measure settled and peak disk usage, including WAL and retained free pages, in the raw-retention benchmark.
+- Add sealed `.jsonl.zst` through in-memory DuckDB flattening as a candidate transformation path.
+- Use `fcntl.flock` on Unix and `msvcrt.locking` on Windows behind one process-lock interface.
+- Store process lock files in the `platformdirs` per-user runtime directory.
+- Assign stable lock filenames to all five application processes.
+- Force an existing TUI process to terminate when a new `spex` invocation replaces it.
+- Start the replacement TUI without waiting for old child-process locks to release.
+- Retry replacement-service lock acquisition with the standard retry policy.
+- Keep the replacement TUI operational and mark a service degraded when lock acquisition retries exhaust.
+- Retry manual service restarts with the standard retry policy.
+- Wait for manual restart after replacement-service lock retries exhaust.
+- Identify the affected service and lock owner in degraded operational health.
+- Clear degraded lock status after a successful manual restart.

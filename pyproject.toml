@@ -1,0 +1,23 @@
+[project]
+name = "spex"
+version = "0.1.0"
+description = "A Bluesky Jetstream v2 data pipeline with terminal operations and analytics interfaces"
+readme = "README.md"
+authors = [
+    { name = "Joshua Lizana", email = "josh.lizana@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "aioduckdb>=0.1.0",
+    "aiosqlite>=0.22.1",
+    "duckdb>=1.5.5",
+    "textual>=8.2.8",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+spex = "spex:main"
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
