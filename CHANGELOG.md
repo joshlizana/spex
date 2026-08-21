@@ -16,28 +16,42 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Add technical research and code-review report templates.
 - Document the Jetstream v2 commit envelope and canonical record schemas for posts, reposts, likes, blocks, and follows.
 - Research Python-native process orchestration and task-pool options for Spex.
+- Research the minimum live, backfill, DuckLake, and Streamlit dependencies for the walking skeleton.
+- Research Textual standard-error capture and Python 3.14 spawn resource-tracker compatibility.
+- Research a dedicated main-process orchestrator with Textual as an IPC spoke.
 - Separate structural architecture, process control, pipeline data flow, and verification into focused design documents.
 - Define the walking skeleton around one live post, service health, post-text transformation, and a Streamlit posts table.
 - Add post counts by DID to the walking-skeleton dashboard and retain public Jetstream fields locally without anonymization.
 - Extend the walking skeleton through live and backfill ingestion, using an environment variable for the test archive credential.
+- Add `websockets`, HTTPX, Streamlit, and `platformdirs` as direct runtime dependencies for the walking skeleton.
+- Add initial live, backfill, pipeline, and dashboard service scaffolds.
+- Define centralized JSON Lines application logging, hourly rotation, TUI log controls, and a persisted-log-backed TUI readout.
+- Rotate logs hourly, retain ten Zstandard-compressed files, use stable event names, and drain logs during shutdown.
+- Define the Linux and WSL data, configuration, state, runtime, log, and cache layout through `platformdirs`.
+- Keep structured logging and the TUI log readout outside the M0 walking skeleton.
+- Create `config.json` with validated defaults during first-run configuration loading.
+- Bootstrap the accepted `platformdirs` directory tree before the orchestrator starts child processes.
+- Define M0 service state through `running` and `paused` booleans, with inactive state taking precedence.
+- Route child-process logs to the orchestrator and let Textual read the persisted combined log.
 
 ### Changed
 
-- Run blocking process and connection supervision through Textual thread workers with thread-safe UI messaging.
-- Define the Textual application as the unified user interface and process orchestrator.
+- Select `websockets`, HTTPX, Streamlit, and `platformdirs` for M0, standardize process creation on `spawn`, and place M0 data under the resolved application-data directory.
+- Decompose the walking skeleton into executable foundation, control, storage, ingestion, processing, dashboard, and verification work packages.
+- Run listener and connection monitoring in the orchestrator and keep Textual updates behind its thread-safe messaging boundary.
+- Separate the main-process orchestrator from the spawned Textual operational interface.
 - Select direct `multiprocessing.Process` supervision for named application services.
 - Select a direct `spex` application entry point and internal orchestration without Typer or structured headless commands.
 - Define the intended users, portfolio objective, and personal data-exploration use case.
 - Assign repository lifecycle, commit, and GitHub push responsibilities to Codex.
 - Require confirmed information in documentation templates and surface unknown details for discussion.
-- Define `uv` deployment for Linux, Windows, and macOS.
+- Define `uv` deployment for Linux and WSL.
 - Ask comprehensive related project questions in numbered groups for reference.
 - Define Spex as one packaged, multi-process application containing every logical component.
-- Assign backfill, live ingestion, validation and transformation, Streamlit, and Textual TUI to five processes.
-- Place Typer orchestration alongside the Textual TUI.
-- Select `multiprocessing.connection` with `AF_UNIX` and `AF_PIPE` for inter-process communication.
+- Assign the orchestrator, Textual, backfill, live ingestion, validation and transformation, and Streamlit to six processes when every component is active.
+- Select `multiprocessing.connection` with `AF_UNIX` for inter-process communication.
 - Require a lock file to prevent duplicate process instances.
-- Classify cross-platform lock-file implementation as an open research and design decision.
+- Select Linux advisory lock files for duplicate-process prevention.
 - Define `spex` as the complete application start command.
 - Define `uv tool install spex` as the installation command.
 - Use the Jetstream service over WebSocket for live ingestion and HTTP/XRPC for historical backfill.
@@ -117,7 +131,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Store local benchmark results in a project-scoped, Git-ignored directory.
 - Use root-level `benchmarks/` for local results and reserve `docs/benchmarks/` for committed summaries.
 - Store local benchmark results and generated portfolio summaries as Markdown.
-- Launch the Textual TUI/Typer process and Streamlit dashboard when `spex` starts.
+- Launch the orchestrator, Textual interface, and Streamlit dashboard when `spex` starts.
 - Start pipeline worker processes through TUI controls.
 - Start validation and transformation automatically with live ingestion or backfill.
 - Drain pending raw events before validation and transformation stop.
@@ -170,8 +184,8 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Report expired checkpoint replacement in TUI operational health.
 - Classify expired checkpoint replacement as a warning.
 - Keep expired-checkpoint warnings visible until user acknowledgment.
-- Always stop Streamlit and all running pipeline workers when the TUI exits.
-- Shut down child processes after an unexpected TUI/orchestrator failure.
+- Treat TUI exit as an application-shutdown request that stops Streamlit and all running pipeline workers.
+- Shut down every remaining child after an unexpected TUI or orchestrator failure.
 - Detect orchestrator loss through heartbeats on the existing process-control channel.
 - Send heartbeats every 5 seconds and detect parent loss after 15 seconds.
 - Keep heartbeat timing fixed as an internal protocol setting.
@@ -194,7 +208,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Store the complete durable request-result ledger in SQLite under the `platformdirs` application-data directory.
 - Limit request-ledger records to message IDs and statuses without command payloads, results, or secrets.
 - Clean the request ledger at application startup and on the recurring hourly cleanup schedule.
-- Delete session-ledger records during clean TUI shutdown and discard interrupted-session records at startup.
+- Delete session-ledger records during clean application shutdown and discard interrupted-session records at startup.
 - Delete active-session ledger records after one hour.
 - Wait one second for command acceptance before marking the command unknown.
 - Use command-specific completion timeouts.
@@ -235,11 +249,11 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Accept recent ledger loss after power failure because startup creates a fresh ledger.
 - Permanently replace the ledger, WAL, and shared-memory files at startup.
 - Recreate the ledger when its schema version differs.
-- Set ledger-file mode to `0600` on Linux, macOS, and WSL.
+- Set ledger-file mode to `0600` on Linux and WSL.
 - Retry disk-full and I/O errors with the standard policy while allowing commands to continue in degraded ledger health.
 - Apply the standard retry policy to every retryable operation unless a documented exception applies.
 - Name each request ledger for its application session ID.
-- Set the ledger-directory mode to `0700` on Linux, macOS, and WSL.
+- Set the ledger-directory mode to `0700` on Linux and WSL.
 - Retry prior-session ledger deletion and allow a fresh session-named ledger to proceed in degraded health after exhaustion.
 - Generate one UUIDv4 per orchestrator lifetime, retain it across worker restarts, and renew it with a replacement orchestrator.
 - Name every ledger `requests-{timestamp}-{session_id}.sqlite3`.
@@ -255,8 +269,9 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Pass the session ID directly to child processes and keep ledger rows free of redundant session fields.
 - Reject old-session child connections and terminate orphaned children during orchestrator replacement.
 - Keep canonical lowercase UUIDs and session timestamps internal and non-configurable.
-- Run the Textual TUI, Typer orchestrator, and session owner in one main process.
-- Keep `tui.lock` for the main process and identify its role as `orchestrator`.
+- Run the orchestrator as the session-owning main process and Textual as its spawned IPC spoke.
+- Name the main-process component and protocol role `hub`, with separate `hub.lock` and `tui.lock` files.
+- Encode process start time in lock metadata as UTC Unix microseconds.
 - Record PID, session ID, role, and start time in every process lock.
 - Discover orphans through all child locks, allow the 15-second heartbeat window, then force termination.
 - Use `SIGKILL` on Unix-like systems and `TerminateProcess` on Windows for orphan enforcement.
@@ -295,14 +310,18 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Put a thin captured-post walking skeleton before platform hardening and component expansion.
 - Measure settled and peak disk usage, including WAL and retained free pages, in the raw-retention benchmark.
 - Add sealed `.jsonl.zst` through in-memory DuckDB flattening as a candidate transformation path.
-- Use `fcntl.flock` on Unix and `msvcrt.locking` on Windows behind one process-lock interface.
+- Use `fcntl.flock` for process locking on Linux and WSL.
 - Store process lock files in the `platformdirs` per-user runtime directory.
-- Assign stable lock filenames to all five application processes.
-- Force an existing TUI process to terminate when a new `spex` invocation replaces it.
-- Start the replacement TUI without waiting for old child-process locks to release.
+- Assign stable lock filenames to all six application processes.
+- Force an existing orchestrator to terminate when a new `spex` invocation replaces it.
+- Start the replacement orchestrator without waiting for old child-process locks to release.
 - Retry replacement-service lock acquisition with the standard retry policy.
-- Keep the replacement TUI operational and mark a service degraded when lock acquisition retries exhaust.
+- Keep the replacement orchestrator and TUI operational and mark a role degraded when lock acquisition retries exhaust.
 - Retry manual service restarts with the standard retry policy.
 - Wait for manual restart after replacement-service lock retries exhaust.
 - Identify the affected service and lock owner in degraded operational health.
 - Clear degraded lock status after a successful manual restart.
+
+### Removed
+
+- Remove Typer and its transitive dependencies from the application runtime.

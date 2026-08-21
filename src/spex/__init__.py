@@ -1,15 +1,12 @@
 import asyncio
 
-from spex.tui import SpexTUI
+from spex.app import Spex
+from spex.bootstrap import bootstrap_spex
 
-async def _async_bridge(app: SpexTUI) -> None:
-    await app.run_async()
 
-async def orchestrator() -> None:
-    """Runs an asynchronous orchestration loop. This is a placeholder for the actual orchestration logic."""
-    while True:
-        await asyncio.sleep(1)  # Placeholder for actual orchestration tasks
-        
 def main() -> None:
-    app = SpexTUI()
-    asyncio.run(_async_bridge(app))
+    """Bootstrap Spex and run its Textual control plane."""
+
+    bootstrap_spex()
+    app = Spex()
+    asyncio.run(app.run_async())

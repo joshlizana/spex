@@ -8,36 +8,104 @@ This file separates the implementation roadmap from its supporting decisions and
 
 This deliberately thin slice proves both complete ingestion paths with one live post and one backfilled post before hardening any component.
 
-- [x] Start `spex` with a minimal Textual main process and one status view.
-- [ ] Remove the obsolete Typer runtime dependency from the package configuration.
-- [ ] Launch skeletal ingestion, validation-and-transformation, and Streamlit child processes through the final process boundaries.
-- [ ] Start live ingestion through the TUI and capture one `app.bsky.feed.post` event from Jetstream.
-- [ ] Read the archive credential from the test environment and start a minimal post backfill through the TUI.
-- [ ] Capture one backfilled `app.bsky.feed.post` event from the Jetstream archive.
-- [ ] Pass both events through the same replaceable raw-store interface backed by a minimal JSON Lines implementation.
-- [ ] Validate that both events decode and contain the fields required by the slice.
-- [ ] Transform both post texts through the same analytical mapping.
-- [ ] Insert both mutations into one minimal DuckLake table.
-- [ ] Show service health in the Textual status view.
-- [ ] Show a table of posts and post counts grouped by DID from DuckLake in Streamlit.
-- [ ] Add end-to-end verification that traces one live record and one backfilled record through their ingestion paths, shared transformation, DuckLake, and Streamlit.
+#### 0.1 Complete the executable foundation
+
+- [x] Create a minimal Textual interface with one status view.
+- [x] Remove the obsolete Typer runtime dependency from the package configuration.
+- [x] Select `websockets`, HTTPX, Streamlit, and `platformdirs` as the additional dependencies required by the slice.
+- [x] Add the selected walking-skeleton dependencies and refresh `uv.lock`.
+- [x] Use the `spawn` multiprocessing context on every supported platform.
+- [x] Create importable service scaffolds for live ingestion, backfill, validation and transformation, and Streamlit.
+- [x] Resolve M0 raw files and DuckLake data under the Spex application-data directory provided by `platformdirs`.
+- [x] Define the exact M0 data, configuration, and runtime paths beneath the resolved `platformdirs` roots.
+- [x] Bootstrap the accepted directory tree before starting application processes.
+- [ ] Validate M0 path creation and isolation on Linux and WSL.
+
+#### 0.2 Establish the minimal control plane
+
+- [x] Define the walking-skeleton service state as the `running` and `paused` booleans, with `running=false` taking precedence.
+- [ ] Create the dedicated main-process orchestrator and explicit `spawn` context.
+- [ ] Bind the authenticated orchestrator listener before spawning Textual.
+- [ ] Spawn Textual as a non-daemonic IPC spoke with inherited terminal streams.
+- [ ] Complete the TUI hello, initial-state, shutdown-request, connection-loss, and exit lifecycle.
+- [ ] Define the walking-skeleton service transitions.
+- [ ] Add Textual controls for starting and stopping live ingestion and backfill.
+- [ ] Start validation and transformation automatically with either ingestion service.
+- [ ] Launch every child with `multiprocessing.Process` and retain its process handle.
+- [ ] Monitor one orchestrator-owned `multiprocessing.connection.Listener` independently of Textual.
+- [ ] Connect each spoke to the listener and associate the connection with its role.
+- [x] Define the minimal control and health messages needed by the slice.
+- [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
+- [ ] Show actual child-process and connection state in the Textual status view.
+- [ ] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
+
+#### 0.3 Establish the shared storage path
+
+- [ ] Define the minimal JSON Lines event envelope and completed-file handoff used by both ingestion processes.
+- [ ] Implement a replaceable raw-store interface backed by the minimal JSON Lines path.
+- [ ] Keep live and backfill writes separate while exposing one processing input boundary.
+- [ ] Define the minimal DuckLake catalog, database, schema, and posts table required by the slice.
+- [ ] Define how processing confirms a raw event is represented in DuckLake for the slice.
+
+#### 0.4 Complete live ingestion
+
+- [ ] Select the walking-skeleton WebSocket client.
+- [ ] Connect to the fixed Jetstream live endpoint.
+- [ ] Subscribe only to `app.bsky.feed.post` without a DID filter.
+- [ ] Receive and persist one live post mutation through the raw-store boundary.
+- [ ] Report live-ingestion state and failure to Textual.
+
+#### 0.5 Complete historical backfill
+
+- [ ] Name and document the test-only archive credential environment variable.
+- [ ] Validate that the credential exists before starting backfill.
+- [ ] Select the walking-skeleton HTTP client.
+- [ ] Request a minimal archive range containing `app.bsky.feed.post` records.
+- [ ] Receive and persist one backfilled post mutation through the same raw-store boundary.
+- [ ] Report backfill state and failure to Textual without exposing the credential.
+
+#### 0.6 Complete processing and persistence
+
+- [ ] Read completed raw input from both ingestion sources.
+- [ ] Decode the Jetstream commit envelope and `app.bsky.feed.post` record.
+- [ ] Validate only the envelope, DID, record identity, text, and timestamps required by the slice.
+- [ ] Transform live and backfilled posts through one mapping.
+- [ ] Preserve enough source identity to trace each output row to its Jetstream mutation.
+- [ ] Insert both mutations into the minimal DuckLake posts table.
+- [ ] Report processing and persistence state or failure to Textual.
+
+#### 0.7 Complete the analytical view
+
+- [ ] Launch Streamlit as a supervised child process.
+- [ ] Open DuckLake through a read-only dashboard boundary.
+- [ ] Display the posts table.
+- [ ] Display post counts grouped by DID.
+- [ ] Represent empty and unavailable data without crashing the dashboard.
+
+#### 0.8 Verify and close the slice
+
+- [ ] Trace one live record from Jetstream through raw storage, processing, DuckLake, and Streamlit.
+- [ ] Trace one backfilled record through the same downstream path.
+- [ ] Confirm the displayed rows retain the identity of the ingested mutations.
+- [ ] Confirm Textual remains responsive while its IPC reader and service work run.
+- [ ] Confirm closing Textual causes the orchestrator to stop and join every child process.
 - [ ] Record every deferred production concern in the supporting backlog without expanding the slice.
 
-The slice excludes persistent credential storage, complete collection coverage, raw-store selection, recovery hardening, retention cleanup, performance tuning, and cross-platform validation.
+The slice excludes persistent credential storage, complete collection coverage, raw-store selection, recovery hardening, retention cleanup, performance tuning, and supported-environment validation.
 
 ### 1. Harden the application foundation
 
-- [ ] Stabilize the package entry point and replace slice-local paths with the cross-platform `platformdirs` layout.
+- [ ] Stabilize the package entry point and expand the initial `platformdirs` layout for every application path.
 - [ ] Add configuration loading, validation, and persistence.
 - [ ] Add structured logging and the standard retry utility.
-- [ ] Add the cross-platform process-lock interface and lock metadata.
-- [ ] Verify paths, permissions, lock exclusivity, and process-exit release on every supported platform.
+- [ ] Add the `fcntl.flock` process-lock interface and lock metadata.
+- [ ] Verify paths, permissions, lock exclusivity, and process-exit release on Linux and WSL.
 
 ### 2. Harden the main process and worker contract
 
-- [ ] Expand the walking-skeleton Textual control plane to own child-process orchestration.
+- [ ] Expand the walking-skeleton orchestrator to own child-process supervision and authoritative control state.
 - [ ] Generalize skeletal child launch into reusable worker supervision.
-- [ ] Harden control connections with authentication and platform-specific AF_UNIX or AF_PIPE transport.
+- [ ] Harden control connections with authentication and AF_UNIX transport.
 - [ ] Complete hello, readiness, heartbeat, shutdown, restart, and orphan-cleanup flows.
 - [ ] Persist command state in the session request ledger.
 - [ ] Verify the complete worker lifecycle before adding pipeline behavior.
@@ -94,7 +162,7 @@ The slice excludes persistent credential storage, complete collection coverage, 
 
 ### 10. Validate and present the system
 
-- [ ] Run the functional, failure, cross-platform, and stored-data scale suites.
+- [ ] Run the functional, failure, Linux, WSL, and stored-data scale suites.
 - [ ] Record throughput, processing capacity, end-to-end lag, storage behavior, and query responsiveness.
 - [ ] Publish selected Markdown benchmark summaries.
 - [ ] Complete the portfolio demonstrations and supporting documentation.
@@ -105,10 +173,10 @@ Resolve these items when their roadmap increment becomes active.
 
 ## 0. Release intent and constraints
 
-- [x] Use a direct entry point into the Textual control plane with no structured headless command interface.
+- [x] Use a direct entry point into the main-process orchestrator with no structured headless command interface.
 - [x] Supervise each named service through a direct `multiprocessing.Process` handle.
-- [x] Run blocking process and connection supervision through Textual `@work(thread=True)` functions.
-- [x] Return control-thread state through `post_message()` or `call_from_thread()`.
+- [x] Assign listener ownership and connection monitoring to the dedicated main-process orchestrator.
+- [x] Return TUI connection-reader state through `post_message()` or `call_from_thread()`.
 - [x] Define walking-skeleton completion as a runnable application that starts the TUI and orchestrator, activates live ingestion, backfill, and processing, and displays transformed data in Streamlit.
 - [x] Prove live and backfill ingestion through the same downstream storage and processing path.
 - [x] Read the archive credential from an environment variable while testing the slice and defer persistent encrypted credential storage.
@@ -127,16 +195,28 @@ Resolve these items when their roadmap increment becomes active.
 - [ ] Define the application-data, configuration, runtime, raw-data, dataset, benchmark, and log paths resolved through `platformdirs`.
 - [ ] Define configuration persistence and validation boundaries.
 - [ ] Define service health, metrics, logging, and tracing conventions.
+- [x] Select centralized orchestrator logging through an unbounded multiprocessing queue and one listener thread.
+- [x] Select one combined JSON Lines application log with hourly rotation.
+- [x] Limit initial dashboard logging to Spex service records and exclude Streamlit framework output.
+- [x] Control the log level and expose a log readout through the TUI.
+- [x] Rotate logs hourly, retain ten rotated files, and compress rotated files with Zstandard.
+- [x] Use one global TUI log level and drain queued logs after every child exits during shutdown.
+- [x] Include a stable machine-readable event name and a human-readable message in every log record.
+- [x] Feed the TUI log readout from the persisted combined JSON Lines log.
+- [ ] Define active-log following, the TUI reader transition after orchestrator-owned rotation, refresh cadence, remaining structured fields, Zstandard implementation, filenames, and TUI readout behavior.
 - [ ] Define structured command-failure details for logs and TUI health.
 
 ### Process identity and locking
 
 - [ ] Preserve layer dependency rules while decomposing implementation modules.
-- [ ] Test advisory-lock exclusivity and process-exit release on Linux, macOS, Windows, and WSL.
+- [x] Avoid Textual stream-capture interference by creating multiprocessing resources and children from a dedicated main-process orchestrator.
+- [x] Assign the spawned Textual spoke to the main-process orchestrator.
+- [ ] Verify spawned Textual terminal input, rendering, resize handling, graceful exit, hub-loss exit, terminal restoration, and return-code propagation on Linux and WSL.
+- [ ] Test advisory-lock exclusivity and process-exit release on Linux and WSL.
 - [ ] Test stable in-place JSON lock-metadata writes and concurrent reads.
 - [ ] Test session-ID stability across worker restarts and renewal across orchestrator replacement.
 - [ ] Test service-instance ID renewal and main-process session-ID reuse.
-- [ ] Define and test cross-platform process-identity validation for forced orchestrator termination.
+- [ ] Define and test Linux and WSL process-identity validation for forced Hub termination.
 - [ ] Test current-session process-handle restart and old-session manual-intervention fallback.
 - [ ] Test all-service orphan discovery, heartbeat-window shutdown, and platform-specific forced termination.
 - [ ] Test degraded health when an orphan cannot be terminated.
@@ -154,7 +234,7 @@ Resolve these items when their roadmap increment becomes active.
 
 ### IPC transport and protocol
 
-- [ ] Define AF_UNIX and AF_PIPE addresses and same-user endpoint permissions.
+- [ ] Define the AF_UNIX address and same-user endpoint permissions.
 - [ ] Validate memory-only IPC authentication-key transfer under each supported multiprocessing start method.
 - [ ] Define the IPC protocol-version representation and negotiation error schema.
 - [ ] Define strict UTF-8 JSON message schemas and error responses.
@@ -258,7 +338,7 @@ This phase is a research gate for ingestion and downstream batch processing.
 - [ ] Select the password-based key-derivation algorithm and parameters.
 - [ ] Define credential-file location, permissions, corruption handling, and migration.
 - [ ] Define secure credential transfer from the main process to backfill.
-- [ ] Validate encrypted credential storage on Linux, Windows, macOS, and Arch Linux under WSL.
+- [ ] Validate encrypted credential storage on Linux and Arch Linux under WSL.
 - [ ] Test concurrent live and backfill ingestion with overlapping and out-of-order events.
 
 ## 9. Textual operational interface
@@ -283,7 +363,7 @@ This phase is a research gate for ingestion and downstream batch processing.
 
 - [ ] Run functional tests for component contracts and end-to-end data flow.
 - [ ] Run failure tests for service isolation, restart exhaustion, storage exhaustion, and recovery.
-- [ ] Run cross-platform tests for installation, paths, locks, IPC, credentials, and shutdown.
+- [ ] Run Linux and WSL tests for installation, paths, locks, IPC, credentials, and shutdown.
 - [ ] Run stored-data scale tests with captured Jetstream events.
 - [ ] Measure sustained ingestion throughput, processing capacity, end-to-end lag, and query responsiveness.
 - [ ] Publish selected benchmark summaries under `docs/benchmarks/`.

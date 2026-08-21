@@ -25,7 +25,7 @@ Spex handles continuous ingestion, historical backfills, validation, transformat
 
 Chosen option: **Focused logical components within one application**.
 
-Live ingestion, historical backfill, validation, and transformation remain distinct logical components. DuckLake provides the analytical data mart. Textual is the application control plane, and Streamlit provides the analytical interface. Every component is packaged as one application. Backfill, live ingestion, validation and transformation, Streamlit, and the Textual control plane run as five processes.
+Live ingestion, historical backfill, validation, and transformation remain distinct logical components. DuckLake provides the analytical data mart. The Hub is the application orchestrator and control plane, Textual provides the operational interface, and Streamlit provides the analytical interface. Every component is packaged as one application. The Hub, Textual, backfill, live ingestion, validation and transformation, and Streamlit run as six processes when every component is active.
 
 ### Consequences
 

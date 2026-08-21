@@ -21,9 +21,9 @@ Spex needs a controllable and observable pipeline that processes Bluesky Jetstre
 
 - Process live and historical Jetstream data through explicit boundaries.
 - Preserve valid analytical data and rejected source records in DuckLake.
-- Control services and inspect health through a Textual control plane.
+- Control services and inspect health through a Textual interface connected to the orchestrator.
 - Present read-only analytical views through Streamlit.
-- Package every component as one cross-platform application.
+- Package every component as one Linux application that also runs under WSL.
 - Use multiple processes for isolation and parallel execution.
 - Demonstrate real-time and bulk-load data architecture.
 
@@ -41,14 +41,14 @@ Spex needs a controllable and observable pipeline that processes Bluesky Jetstre
 ```text
                           Spex application
 ┌──────────────────────────────────────────────────────────────────┐
-│ Textual control plane                                           │
-│        │ controls, supervises, and aggregates health            │
+│ Hub ────────────────────> Textual operational interface          │
+│        │ supervises and aggregates health                        │
 │        v                                                         │
-│ Live ingestion ──┐                                              │
-│                  ├──> Raw retention ──> Processing ──> DuckLake │
-│ Backfill ────────┘                                      │       │
-│                                                        v       │
-│                                                    Streamlit    │
+│ Live ingestion ──┐                                               │
+│                  ├──> Raw retention ──> Processing ──> DuckLake  │
+│ Backfill ────────┘                                      │        │
+│                                                         v        │
+│                                                    Streamlit     │
 └──────────────────────────────────────────────────────────────────┘
        ^                    ^
        │ WebSocket          │ HTTP/XRPC archive
@@ -61,13 +61,14 @@ Live ingestion and backfill operate independently and write through one logical 
 
 | Process | Responsibilities |
 | --- | --- |
-| Textual control plane | Direct application entry point, operator interface, session ownership, supervision, configuration, and aggregate health |
+| Hub | Main application entry point, orchestration, session ownership, IPC, supervision, configuration, request state, logging, and aggregate health |
+| Textual | Terminal ownership, operator input, configuration views, and operational-health presentation |
 | Live | Current Jetstream ingestion |
 | Backfill | Historical Jetstream ingestion |
 | Validation and transformation | Schema validation, normalization, and DuckLake loading |
 | Streamlit | Read-only analytical dashboard |
 
-The orchestrator is the main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting either ingestion process ensures that validation and transformation runs. Processing drains and stops after the final ingestion process stops.
+The Hub is the orchestrator and main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting either ingestion process ensures that validation and transformation runs. Processing drains and stops after the final ingestion process stops.
 
 See [Process Control](process-control.md) for IPC, identity, supervision, locking, request-ledger, and shutdown behavior.
 
@@ -75,7 +76,8 @@ See [Process Control](process-control.md) for IPC, identity, supervision, lockin
 
 ```text
 Interface and control
-├── Textual control plane ───────> Pipeline service contracts
+├── Textual ─────────────────────> Hub control contract
+├── Hub ─────────────────────────> Pipeline service contracts
 └── Streamlit ───────────────────> DuckLake read access
 
 Pipeline
@@ -97,7 +99,7 @@ External Jetstream services feed the pipeline layer.
 
 | Layer | Dependency rule |
 | --- | --- |
-| Interface and control | Textual owns operator interaction, service contracts, and control state. Streamlit uses read-only analytical data. |
+| Interface and control | Textual owns operator interaction. The orchestrator owns service contracts and authoritative control state. Streamlit uses read-only analytical data. |
 | Pipeline | Uses external sources and data boundaries without owning user interfaces. |
 | Data | Owns persistence semantics without owning orchestration. |
 | Platform | Supplies process, IPC, locking, filesystem, path, logging, and health facilities without product workflow rules. |
@@ -109,13 +111,13 @@ See [Pipeline and Data Flow](pipeline-data-flow.md) for ingestion, raw retention
 
 ## Product interfaces
 
-The Textual application is the configuration, orchestration, and operational-health control plane. A direct console entry point launches it as the main process. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
+The Hub is the application orchestrator, control plane, and main process. The Textual child process is its terminal-facing control and operational-health interface. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
 
-The `spex` command launches the main process and Streamlit. The TUI starts and stops pipeline workers. Closing the TUI shuts down the complete application.
+The `spex` command launches the orchestrator, which binds IPC and spawns Textual and the application services. TUI actions request service transitions through IPC. Closing the TUI requests shutdown of the complete application.
 
 ## Deployment and dependencies
 
-- `uv tool install spex` installs the complete application on Linux, Windows, and macOS.
+- `uv tool install spex` installs the complete application on Linux and WSL.
 - `jetstream.us-east.bsky.network` provides live WebSocket events and authenticated HTTP/XRPC archives.
 - Textual provides the terminal interface.
 - The package console script provides the direct application entry point.
@@ -125,7 +127,7 @@ The `spex` command launches the main process and Streamlit. The TUI starts and s
 
 ## Quality strategy
 
-Functional, recovery, performance, scale, and cross-platform verification use captured Jetstream events where reproducibility or throughput matters. Live integration checks cover protocol compatibility. See [Verification Strategy](verification-strategy.md).
+Functional, recovery, performance, scale, Linux, and WSL verification use captured Jetstream events where reproducibility or throughput matters. Live integration checks cover protocol compatibility. See [Verification Strategy](verification-strategy.md).
 
 ## Open structural questions
 

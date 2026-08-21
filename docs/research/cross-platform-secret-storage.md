@@ -4,7 +4,7 @@ Research date: 2026-08-18
 
 ## Goal
 
-Identify a secure method for persisting the Jetstream archive bearer credential across Linux, Windows, and macOS in a Python 3.14 application.
+Identify a secure method for persisting the Jetstream archive bearer credential on Linux and WSL in a Python 3.14 application while considering broader portability options.
 
 ## Method
 
@@ -64,7 +64,7 @@ OWASP recommends storing encryption keys separately from encrypted data and usin
 
 ## Conclusions
 
-Spex selects a master-password-protected encrypted file for persisted secrets. This approach provides one storage model across Linux, Windows, macOS, and WSL without requiring a configured desktop credential service.
+Spex selects a master-password-protected encrypted file for persisted secrets. This approach provides one storage model across Linux and WSL without requiring a configured desktop credential service.
 
 The user supplies the master password when starting a backfill that needs the stored Jetstream archive credential. Application startup and workflows that do not need the credential do not prompt. The unlocked credential remains available for the complete backfill session, including automatic retries. A later backfill session requires another unlock. Spex does not persist the master password or a derived encryption key. The encrypted file stores the salt and the parameters required to derive a key from the supplied password.
 
@@ -77,16 +77,16 @@ The design still needs decisions for:
 - Encrypted-file subdirectory and filesystem permissions
 - The service and account identifiers used for lookup
 - Credential replacement and deletion
-- Transfer from the TUI process to the backfill process
+- Transfer from the TUI process through the orchestrator to the backfill process
 - Log and error-message redaction
 
 ## Next steps
 
 - Select the authenticated-encryption format and library.
 - Select the password-based key-derivation algorithm and parameters.
-- Define the encrypted-file subdirectory within the `platformdirs` per-user application-data directory, permissions, corruption handling, and migration.
+- Define permissions, corruption handling, migration, and the encrypted credential filename beneath `user_data_path/credentials/`.
 - Design credential lifecycle and inter-process transfer.
-- Validate the encrypted-file design on Linux, Windows, macOS, and Arch Linux under WSL.
+- Validate the encrypted-file design on Linux and Arch Linux under WSL.
 
 ## Sources
 

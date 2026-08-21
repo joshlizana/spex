@@ -32,6 +32,8 @@ The walking skeleton reads the archive credential from an environment variable f
 
 Live and backfill write independently through one logical raw store. Concurrent sources can arrive out of order. Ingestion continues while processing is unavailable, subject to capacity.
 
+M0 places raw files and DuckLake data under the Spex application-data directory resolved by `platformdirs`. Development resets may remove that application-specific directory after resolving and validating its exact path.
+
 Raw capacity defaults to 1 GiB and has a 400 MiB minimum. The minimum reserves one temporary and one completed 100 MiB file for each ingestion service. At capacity, ingestion pauses instead of intentionally dropping events. It resumes when usage falls at least 100 MiB below the limit.
 
 JSON Lines and SQLite WAL remain benchmark candidates. Selection uses sustained-write, replay-read, crash-recovery, cleanup, concurrency, and settled and peak disk-use evidence.
@@ -42,7 +44,7 @@ Live and backfill own separate temporary and completed files. Each service keeps
 
 Sealed files use `.jsonl.zst`. In-memory DuckDB reads them with an explicit JSON schema, flattens nested records, and produces rows for DuckLake without an intermediate expanded file.
 
-Each ingestion service keeps a durable state artifact in application data. It records the open temporary filename, last written filename, oldest checkpoint in the open file, owning service, and creation timestamp. Updates flush a same-directory replacement and atomically swap it into place. The artifact remains after raw consumption.
+Each ingestion service keeps its durable state artifacts beneath the Spex `user_state_path`. They record the open temporary filename, last written filename, oldest checkpoint in the open file, owning service, and creation timestamp. Updates flush a same-directory replacement and atomically swap it into place. The artifacts remain after raw consumption.
 
 If state is missing or corrupt while files exist, recovery uses the first complete record in a non-empty open file or the final record in the newest completed file when the open file is empty. Safe reconstruction failure stops that service and reports degraded health. Absence of both state and files is a clean first run.
 

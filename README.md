@@ -4,7 +4,7 @@ Spex is a Bluesky Jetstream v2 data pipeline. It ingests live and historical eve
 
 ## Development status
 
-Spex provides a basic Textual control plane with a placeholder health indicator through the `spex` command. Pipeline services, operational health, DuckLake loading, and Streamlit views remain under development.
+Spex provides a basic Textual interface with a placeholder health indicator through the `spex` command. The orchestrator, pipeline services, operational health, DuckLake loading, and Streamlit views remain under development.
 
 ## Audience
 
@@ -16,13 +16,13 @@ The primary use case demonstrates an architecture that handles real-time streams
 
 ## Interfaces
 
-- A Textual terminal user interface controls the system, accepts and persists the Jetstream archive credential, and displays operational health.
-- The Textual control plane orchestrates services and presents operational health.
+- A Textual terminal user interface sends operator commands, accepts and persists the Jetstream archive credential, and displays operational health.
+- The main-process Hub owns orchestration, IPC, application state, and shutdown.
 - A Streamlit dashboard presents analytical views backed by the data mart.
 
 ## Deployment
 
-Spex packages all components as one application and runs them across multiple processes for parallel execution. It uses `uv` for deployment on Linux, Windows, and macOS.
+Spex packages all components as one application and runs them across multiple processes for parallel execution. It uses `uv` for deployment on Linux and WSL.
 
 Install Spex:
 
@@ -46,13 +46,14 @@ Spex uses focused logical components within one application, with one responsibi
 - Transformation prepares validated records for analytical use.
 - A DuckLake data mart stores and serves transformed data.
 
-The application runs five processes:
+The complete application runs six processes:
 
+- Hub
 - Historical backfill
 - Live ingestion
 - Validation and transformation
 - Streamlit dashboard
-- Textual control plane
+- Textual terminal interface
 
 Each process uses a lock file to prevent multiple instances.
 

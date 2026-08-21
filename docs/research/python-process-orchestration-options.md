@@ -10,11 +10,11 @@ Evaluate Python-native options for supervising Spex's long-lived local services 
 
 Compare official documentation for the Python standard library, Joblib, Loky, Pebble, and MPIRE against the confirmed Spex process model:
 
-- Five named processes with different responsibilities.
-- Textual and orchestration in the main process.
+- Five named child processes with different responsibilities.
+- A dedicated main-process orchestrator and a Textual child process.
 - Explicit start, stop, restart, readiness, heartbeat, and degraded states.
 - Role-specific locks and service-instance identities.
-- Cross-platform Linux, macOS, Windows, and WSL behavior.
+- Linux and WSL behavior.
 - Authenticated `multiprocessing.connection` control channels.
 - Graceful service-specific shutdown followed by forced termination when required.
 
@@ -37,7 +37,7 @@ The standard library exposes each child as a `Process` with lifecycle methods, a
 
 This option leaves supervision policy in Spex. That policy already exists as product behavior: role identity, restart exhaustion, heartbeat loss, locks, graceful drain, and forced termination. Direct process ownership keeps those rules visible instead of adapting them to pool semantics.
 
-Cross-platform operation requires explicit attention to importable targets, start methods, serializable startup arguments, and the protected application entry point. Python 3.14 uses a start method other than `fork` by default, so Spex cannot rely on inherited main-process state.
+Linux and WSL operation requires explicit attention to importable targets, start methods, serializable startup arguments, and the protected application entry point. Python 3.14 uses a start method other than `fork` by default, so Spex cannot rely on inherited main-process state.
 
 ### `asyncio` subprocess APIs
 

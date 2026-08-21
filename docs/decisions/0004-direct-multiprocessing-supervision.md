@@ -4,14 +4,14 @@ Status: accepted
 
 ## Context and problem statement
 
-Spex needs to supervise five named, long-lived local processes with role-specific state, IPC identities, readiness, health, locks, graceful shutdown, and forced termination. Task-pool abstractions do not directly represent those service lifecycles.
+Spex needs to supervise five named child processes with role-specific state, IPC identities, readiness, health, locks, graceful shutdown, and forced termination. These children are Textual, live ingestion, backfill, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
 
 ## Decision drivers
 
 - Each service has one stable role and distinct lifecycle behavior.
 - The orchestrator requires direct process handles and exit observation.
 - Spex uses authenticated `multiprocessing.connection` control channels.
-- The application supports Linux, macOS, Windows, and WSL.
+- The application supports Linux and WSL.
 - The design avoids an external broker, daemon, or process manager.
 
 ## Considered options
@@ -29,15 +29,15 @@ Chosen option: **Direct `multiprocessing.Process` supervision**, because it repr
 
 ### Consequences
 
-- The Textual control plane runs blocking process and connection supervision through functions decorated with `@work(thread=True)`.
-- That control thread owns process creation, handles, exit observation, stop requests, and forced termination.
+- The main-process orchestrator creates every child with `multiprocessing.Process` and retains its process handle.
+- The orchestrator creates the listener before spawning Textual and owns connection monitoring independently of Textual's event loop.
 - Textual's main thread remains the exclusive owner of UI state and widget updates.
-- Thread workers return state changes through `post_message()` or `call_from_thread()`.
+- Textual connection handling returns state changes through `post_message()` or `call_from_thread()`.
 - Worker targets remain importable and receive serializable startup arguments.
-- Spex selects an explicit multiprocessing start context for cross-platform consistency.
+- Spex uses the `spawn` multiprocessing context on Linux and WSL.
 - Pool libraries remain outside the application-orchestration boundary.
 - Bounded parallel work inside a service may use a pool library when profiling supports it.
 
 ### Confirmation
 
-Compliance requires every service to retain a direct `multiprocessing.Process` handle and role identity. Lifecycle verification covers startup, observed exit, graceful stop, forced stop, UI responsiveness, thread-safe UI updates, and supported-platform behavior.
+Compliance requires the orchestrator to retain a direct `multiprocessing.Process` handle and role identity for every child under the `spawn` context. Lifecycle verification covers startup, observed exit, graceful stop, forced stop, UI responsiveness, thread-safe UI updates, and supported-platform behavior.

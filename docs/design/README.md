@@ -9,4 +9,4 @@ Technical design documents use [`../templates/tdd.md`](../templates/tdd.md). The
 - [`architecture.md`](architecture.md) defines system structure, layers, dependencies, and process boundaries.
 - [`process-control.md`](process-control.md) defines orchestration, IPC, process identity, locking, supervision, and request tracking.
 - [`pipeline-data-flow.md`](pipeline-data-flow.md) defines ingestion, raw retention, processing, recovery, and analytical storage.
-- [`verification-strategy.md`](verification-strategy.md) defines functional, recovery, cross-platform, performance, and scale verification.
+- [`verification-strategy.md`](verification-strategy.md) defines functional, recovery, supported-environment, performance, and scale verification.
