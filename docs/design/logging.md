@@ -37,7 +37,7 @@ The listener writes one combined JSON Lines log beneath the Spex `platformdirs` 
 
 The TUI controls one global Spex log level and provides a log readout screen. It reads persisted records from the combined JSON Lines log and never receives log records directly from service processes. The orchestrator owns rotation. The TUI only detects replacement of the active file and continues reading from the new file. File-following behavior, reader transition after rotation, refresh cadence, filtering, search, and pause behavior remain unresolved.
 
-Each record includes a stable machine-readable event name, human-readable message, UTC timestamp, severity, logger name, process name, process ID, and service role. Session ID, service-instance ID, message ID, exception details, and numeric measurements appear when applicable. The remaining JSON schema details remain unresolved.
+Each process binds its session ID, service role, and process-instance ID to its logger once during startup. Every record inherits that process context. Each record also includes a stable machine-readable event name, human-readable message, UTC timestamp, severity, logger name, process name, and process ID. Message ID, exception details, and numeric measurements appear when applicable. The remaining JSON schema details remain unresolved.
 
 Spex dashboard-service logs join the combined application log. Streamlit framework output remains separate during the initial implementation.
 
@@ -47,7 +47,7 @@ The multiprocessing module's internal logger does not submit `DEBUG` records thr
 
 ## API
 
-Logger configuration functions, context injection, TUI file-reading behavior, and the JSON record schema remain unresolved.
+Logger configuration functions, process-context binding, TUI file-reading behavior, and the JSON record schema remain unresolved.
 
 ## Dependencies
 

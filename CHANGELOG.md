@@ -8,6 +8,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 
 ### Added
 
+- Add a dependency-ordered, file-by-file control-plane refactor checklist.
 - Add a basic Textual application shell launched by the bare `spex` command.
 - Add a placeholder health indicator to the Textual shell.
 - Define the Bluesky Jetstream v2 pipeline premise and component architecture.
@@ -36,6 +37,12 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 
 ### Changed
 
+- Refactor the live-service scaffold to receive native control dictionaries through its Hub-created pipe and exit on pipe loss.
+- Apply the reviewed pipe-control lifecycle to the backfill-service scaffold.
+- Extract the shared worker lifecycle into `ServiceProcess` and reduce live, backfill, and pipeline to bounded-work subclasses.
+- Start newly spawned worker services active instead of requiring an immediate resume command.
+- Reduce the dashboard service to a Hub-supervised Streamlit process placeholder without worker-control state.
+- Flatten service implementations into one literal module per service role.
 - Select `websockets`, HTTPX, Streamlit, and `platformdirs` for M0, standardize process creation on `spawn`, and place M0 data under the resolved application-data directory.
 - Decompose the walking skeleton into executable foundation, control, storage, ingestion, processing, dashboard, and verification work packages.
 - Run listener and connection monitoring in the orchestrator and keep Textual updates behind its thread-safe messaging boundary.
@@ -49,7 +56,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Ask comprehensive related project questions in numbered groups for reference.
 - Define Spex as one packaged, multi-process application containing every logical component.
 - Assign the orchestrator, Textual, backfill, live ingestion, validation and transformation, and Streamlit to six processes when every component is active.
-- Select `multiprocessing.connection` with `AF_UNIX` for inter-process communication.
+- Select one Hub-created duplex `multiprocessing.Pipe` per child for control communication.
 - Require a lock file to prevent duplicate process instances.
 - Select Linux advisory lock files for duplicate-process prevention.
 - Define `spex` as the complete application start command.
@@ -186,29 +193,23 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Keep expired-checkpoint warnings visible until user acknowledgment.
 - Treat TUI exit as an application-shutdown request that stops Streamlit and all running pipeline workers.
 - Shut down every remaining child after an unexpected TUI or orchestrator failure.
-- Detect orchestrator loss through heartbeats on the existing process-control channel.
-- Send heartbeats every 5 seconds and detect parent loss after 15 seconds.
-- Keep heartbeat timing fixed as an internal protocol setting.
-- Use normal graceful worker shutdown after heartbeat loss.
-- Restrict IPC connections to processes running as the same operating-system user.
-- Generate a new random IPC authentication key for each application session.
+- Detect orchestrator loss through pipe EOF and identify unresponsive children through command timeouts.
+- Bind each control pipe to a Hub-created child process.
 - Report IPC connection loss separately from process failure.
-- Keep each session IPC authentication key in memory and pass it directly to child processes.
 - Route service control communication through the orchestrator as a hub.
-- Retry IPC reconnection with the standard policy, then require manual restart from degraded status.
-- Serialize IPC messages as UTF-8 JSON bytes without pickle deserialization.
-- Include a fixed protocol version and message type in every IPC message.
+- Create a fresh pipe when restarting a child and require manual restart after worker-restart exhaustion.
+- Exchange native Python dictionaries over inherited process pipes.
+- Restrict pickle-based control messages to Hub-created processes holding inherited pipe endpoints.
+- Include message type and payload in every IPC message, add message IDs to correlated exchanges, and report protocol version during readiness.
 - Correlate command acknowledgments through unique request IDs.
 - Reject protocol-version mismatches and mark the affected service degraded.
 - Send separate accepted and completed responses for IPC commands.
 - Return recorded results for duplicate request IDs without repeating commands.
-- Keep the request-result ledger under orchestrator ownership across worker restarts.
+- Keep the ephemeral request-result ledger in Hub memory across worker restarts.
 - Do not retry a command automatically when its accepted response is missing.
 - Mark commands without an accepted response as unknown and allow manual same-ID retry.
-- Store the complete durable request-result ledger in SQLite under the `platformdirs` application-data directory.
+- Discard the request-result ledger when the Hub exits.
 - Limit request-ledger records to message IDs and statuses without command payloads, results, or secrets.
-- Clean the request ledger at application startup and on the recurring hourly cleanup schedule.
-- Delete session-ledger records during clean application shutdown and discard interrupted-session records at startup.
 - Delete active-session ledger records after one hour.
 - Wait one second for command acceptance before marking the command unknown.
 - Use command-specific completion timeouts.
@@ -227,78 +228,27 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Reconcile late completion from unknown to completed and remove its retry action.
 - Reconcile late acceptance from unknown to accepted and restart the completion timer.
 - Reconcile late failure from unknown to terminal failed and remove its retry action.
-- Start command dispatch and pending ledger insertion concurrently as asynchronous operations.
-- Mark a durably recorded request failed when command dispatch fails.
-- Start a replacement pending-ledger write when dispatch succeeds and the first ledger insertion fails.
-- Retry replacement ledger writes with the standard policy and persist the latest known status.
+- Record pending request state in memory before dispatch and mark it failed when dispatch fails.
 - Retry failed command dispatch automatically with the same request ID and sequence.
 - Apply the standard retry policy to automatic dispatch retries.
 - Retain each failed dispatch attempt as an independent minimal ledger row until cleanup.
-- Mark exhausted ledger writes degraded while allowing new and in-flight commands to continue.
-- Clear degraded ledger health after a successful write.
-- Use SQLite WAL mode with the orchestrator as the only request-ledger writer.
-- Apply the standard retry policy to SQLite lock and busy errors.
-- Configure the request ledger with `synchronous=NORMAL` and a SQLite busy timeout.
-- Rely on SQLite automatic WAL checkpointing.
-- Replace the prior ledger at startup without an integrity check.
-- Restrict ledger-file access to the current operating-system user.
-- Version the request-ledger schema for migrations.
-- Delete expired ledger rows in one transaction.
-- Discard runtime-corrupt ledgers, recreate them automatically, and report degraded health until a write succeeds.
-- Use a five-second SQLite busy timeout.
-- Accept recent ledger loss after power failure because startup creates a fresh ledger.
-- Permanently replace the ledger, WAL, and shared-memory files at startup.
-- Recreate the ledger when its schema version differs.
-- Set ledger-file mode to `0600` on Linux and WSL.
-- Retry disk-full and I/O errors with the standard policy while allowing commands to continue in degraded ledger health.
 - Apply the standard retry policy to every retryable operation unless a documented exception applies.
-- Name each request ledger for its application session ID.
-- Set the ledger-directory mode to `0700` on Linux and WSL.
-- Retry prior-session ledger deletion and allow a fresh session-named ledger to proceed in degraded health after exhaustion.
-- Generate one UUIDv4 per orchestrator lifetime, retain it across worker restarts, and renew it with a replacement orchestrator.
-- Name every ledger `requests-{timestamp}-{session_id}.sqlite3`.
-- Encode ledger-creation timestamps as compact UTC microseconds.
-- Rely on inherited Windows per-user application-data permissions without a custom ACL.
-- Delete session ledger, WAL, and shared-memory files under the standard retry policy.
-- Recreate corrupt ledgers with the same session ID and a new timestamped filename.
-- Restrict prior-ledger cleanup to validated regular files matching the ledger pattern and refuse symbolic links.
-- Log exhausted ledger-cleanup retries without degrading startup health.
-- Validate ledger timestamps and UUIDs before cleanup, continue after individual failures, and leave malformed or unrelated entries untouched.
-- Log rejected cleanup symlinks and absolute paths for exhausted cleanup failures.
-- Include the orchestrator session ID in IPC messages, worker health, application logs, and TUI health.
-- Pass the session ID directly to child processes and keep ledger rows free of redundant session fields.
-- Reject old-session child connections and terminate orphaned children during orchestrator replacement.
-- Keep canonical lowercase UUIDs and session timestamps internal and non-configurable.
 - Run the orchestrator as the session-owning main process and Textual as its spawned IPC spoke.
-- Name the main-process component and protocol role `hub`, with separate `hub.lock` and `tui.lock` files.
+- Name the main-process component and protocol role `hub`, with one `hub.lock` file for application ownership.
 - Encode process start time in lock metadata as UTC Unix microseconds.
-- Record PID, session ID, role, and start time in every process lock.
-- Discover orphans through all child locks, allow the 15-second heartbeat window, then force termination.
-- Use `SIGKILL` on Unix-like systems and `TerminateProcess` on Windows for orphan enforcement.
-- Continue with degraded service health when orphan termination fails and log the cleanup identity and outcome.
-- Give each service process a lifetime instance ID stored in lock metadata and used by the message protocol.
+- Record PID and process start time in the Hub lock.
+- Supervise children through Hub-owned process handles and let them shut down on pipe loss.
 - Keep lock files stable and write fixed JSON metadata in place after acquisition.
 - Flush and sync lock metadata before process readiness and retry incomplete metadata reads.
-- Use canonical UUIDv4 service-instance IDs, renew them on worker restart, and reuse the session ID for the main process.
-- Include session and service IDs in every service message, operational health, and logs.
-- Associate connections from lock metadata once, reject mismatched service messages, and require restart after unreadable startup metadata.
-- Write lock metadata before IPC connection and validate each service through a lock-backed hello handshake.
-- Cache immutable metadata after successful hello validation.
-- Restart current-session metadata failures through the process handle and require manual intervention for unidentified old-session orphans.
-- Require hello within five seconds, acknowledge validated identity explicitly, and report readiness after acknowledgment.
-- Keep one active connection per service instance, reject duplicates, and reconnect live processes with the same ID.
-- Restart workers after failed hello validation and leave trusted IPC messages without an application size limit.
-- Enforce five-second hello and hello-ack timeouts with restart or reconnection handling.
-- Keep healthy established connections unchanged when rejecting duplicates.
-- Close malformed post-handshake connections, reject unknown schema fields, and respond to unknown message types.
-- Add UTC microsecond timestamps and heartbeat acknowledgments to IPC messages.
-- Use an orchestrator-owned session sequence starting at zero, retain it across reconnections, and reuse request sequences in responses.
+- Identify services through Hub-owned roles, process handles, and pipe endpoints.
+- Require validated initial state before readiness and keep one pipe per service instance.
+- Restart workers after failed initial-state validation and leave trusted IPC messages without an application size limit.
+- Close invalid pipe connections and respond to unknown message types.
+- Allocate request identity in Hub memory and retain it across child restarts.
 - Keep timestamps informational, omit clock-skew warnings, and tolerate duplicate or skipped sequence values.
-- Treat three consecutive missing heartbeat acknowledgments as connection failure.
-- Require a protocol-version change before adding message fields.
-- Use one synchronized, memory-only orchestrator sequence encoded as a decimal string.
-- Unify message and request IDs as `{session_id}:{sequence}` and reuse them across responses and automatic retries.
-- Keep heartbeat and control-message IDs outside the request ledger.
+- Validate protocol compatibility during child readiness.
+- Keep the concrete request-ID representation unresolved until command dispatch implementation.
+- Keep non-correlated control messages outside the request ledger.
 - Apply overarching process decisions across governed components without repeated narrower decisions.
 - Defer non-blocking implementation details to implementation, testing, and the project TODO.
 - Plan through progressive decomposition from system structure to components, interfaces, behaviors, and implementation details.
@@ -312,16 +262,13 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Add sealed `.jsonl.zst` through in-memory DuckDB flattening as a candidate transformation path.
 - Use `fcntl.flock` for process locking on Linux and WSL.
 - Store process lock files in the `platformdirs` per-user runtime directory.
-- Assign stable lock filenames to all six application processes.
+- Use one stable `hub.lock` filename for application-instance ownership.
 - Force an existing orchestrator to terminate when a new `spex` invocation replaces it.
-- Start the replacement orchestrator without waiting for old child-process locks to release.
-- Retry replacement-service lock acquisition with the standard retry policy.
-- Keep the replacement orchestrator and TUI operational and mark a role degraded when lock acquisition retries exhaust.
-- Retry manual service restarts with the standard retry policy.
-- Wait for manual restart after replacement-service lock retries exhaust.
-- Identify the affected service and lock owner in degraded operational health.
-- Clear degraded lock status after a successful manual restart.
+- Start replacement children with fresh pipes after the replacement Hub acquires its lock.
+- Close each service pipe before joining, apply the standard join intervals, then escalate through termination and kill while retaining the process handle until confirmed exit.
+- Place the Textual application in `src/spex/services/tui.py` as a Hub-spawned service.
 
 ### Removed
 
+- Remove the address-based generic IPC client in favor of service-owned pipe handling.
 - Remove Typer and its transitive dependencies from the application runtime.

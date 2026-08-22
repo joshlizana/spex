@@ -4,13 +4,13 @@ Status: accepted
 
 ## Context and problem statement
 
-Spex needs to supervise five named child processes with role-specific state, IPC identities, readiness, health, locks, graceful shutdown, and forced termination. These children are Textual, live ingestion, backfill, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
+Spex needs to supervise five named child processes with role-specific state, IPC identities, readiness, health, graceful shutdown, and forced termination. These children are Textual, live ingestion, backfill, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
 
 ## Decision drivers
 
 - Each service has one stable role and distinct lifecycle behavior.
 - The orchestrator requires direct process handles and exit observation.
-- Spex uses authenticated `multiprocessing.connection` control channels.
+- Spex uses one Hub-created duplex `multiprocessing.Pipe` control channel per child.
 - The application supports Linux and WSL.
 - The design avoids an external broker, daemon, or process manager.
 
@@ -26,6 +26,8 @@ Spex needs to supervise five named child processes with role-specific state, IPC
 ## Decision outcome
 
 Chosen option: **Direct `multiprocessing.Process` supervision**, because it represents every Spex service as a named process with a direct lifecycle and preserves the established IPC, identity, locking, and shutdown contracts.
+
+The Hub creates every child and supplies its duplex pipe endpoint during `spawn`. Children never discover or reconnect to an independently running Hub. This lifetime binding removes listener, endpoint-authentication, and connection-admission requirements while preserving message-oriented `Connection` semantics.
 
 ### Consequences
 

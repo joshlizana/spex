@@ -1,6 +1,6 @@
 import asyncio
 
-from spex.app import Spex
+from spex.services.tui import Spex
 from spex.bootstrap import bootstrap_spex
 
 

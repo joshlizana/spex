@@ -12,8 +12,8 @@ Compare official documentation for the Python standard library, Joblib, Loky, Pe
 
 - Five named child processes with different responsibilities.
 - A dedicated main-process orchestrator and a Textual child process.
-- Explicit start, stop, restart, readiness, heartbeat, and degraded states.
-- Role-specific locks and service-instance identities.
+- Explicit start, stop, restart, readiness, pipe-loss, and degraded states.
+- Stable role ownership and service-instance identities.
 - Linux and WSL behavior.
 - Authenticated `multiprocessing.connection` control channels.
 - Graceful service-specific shutdown followed by forced termination when required.
@@ -33,9 +33,9 @@ Compare official documentation for the Python standard library, Joblib, Loky, Pe
 
 ### `multiprocessing.Process`
 
-The standard library exposes each child as a `Process` with lifecycle methods, an exit code, and a platform waitable `sentinel`. `multiprocessing.connection.wait()` can wait on process sentinels and connection objects together. Process authentication keys and `Client`/`Listener` connections align with the existing control-plane design.
+The standard library exposes each child as a `Process` with lifecycle methods, an exit code, and a platform waitable `sentinel`. `multiprocessing.connection.wait()` can wait on process sentinels and pipe `Connection` objects together. Hub-created duplex pipes align with the lifetime-bound control-plane design.
 
-This option leaves supervision policy in Spex. That policy already exists as product behavior: role identity, restart exhaustion, heartbeat loss, locks, graceful drain, and forced termination. Direct process ownership keeps those rules visible instead of adapting them to pool semantics.
+This option leaves supervision policy in Spex. That policy already exists as product behavior: role identity, restart exhaustion, pipe loss, graceful drain, and forced termination. Direct process ownership keeps those rules visible instead of adapting them to pool semantics.
 
 Linux and WSL operation requires explicit attention to importable targets, start methods, serializable startup arguments, and the protected application entry point. Python 3.14 uses a start method other than `fork` by default, so Spex cannot rely on inherited main-process state.
 
@@ -43,19 +43,19 @@ Linux and WSL operation requires explicit attention to importable targets, start
 
 `asyncio.create_subprocess_exec()` creates and manages independent child programs with async process handles. This fits an event-driven main process and gives direct control over return codes, termination, and standard streams.
 
-Each Spex service would launch as a separate Python program or module entry point. Spex would still implement authenticated control IPC, role metadata, locks, readiness, heartbeats, and platform-specific process-tree behavior. This adds an executable boundary that the current one-package, `multiprocessing.connection` design does not require.
+Each Spex service would launch as a separate Python program or module entry point. Spex would still implement control IPC, role metadata, readiness, pipe-loss handling, and platform-specific process-tree behavior. This adds an executable boundary that the current one-package, `multiprocessing` design does not require.
 
 ### `concurrent.futures.ProcessPoolExecutor`
 
 `ProcessPoolExecutor` schedules picklable callables into an interchangeable process pool and returns `Future` objects. Python 3.14 provides immediate pool-wide termination and kill operations. An abrupt worker exit breaks the executor and raises `BrokenProcessPool` for pool work.
 
-Spex services are not interchangeable tasks. Each role owns distinct state, IPC identity, lock metadata, health, and graceful shutdown. Mapping these services onto pool workers obscures role ownership and still requires a separate supervisor around the executor.
+Spex services are not interchangeable tasks. Each role owns distinct state, IPC identity, health, and graceful shutdown. Mapping these services onto pool workers obscures role ownership and still requires a separate supervisor around the executor.
 
 ### Joblib and Loky
 
 Joblib's default Loky backend focuses on parallel function execution, reusable worker pools, serialization through cloudpickle, array memmapping, and control of nested native thread pools. Loky provides a reusable `ProcessPoolExecutor` designed to recover a worker pool and reduce repeated spawn cost.
 
-These features suit independent analytical or CPU-bound batch tasks. They do not supply Spex's service protocol, stable role-to-process mapping, lock metadata, readiness handshake, heartbeat semantics, or component-specific graceful drain. Joblib may be evaluated later inside a processing component if profiling identifies suitable independent work. It does not replace the application orchestrator.
+These features suit independent analytical or CPU-bound batch tasks. They do not supply Spex's service protocol, stable role-to-process mapping, readiness exchange, pipe-loss behavior, or component-specific graceful drain. Joblib may be evaluated later inside a processing component if profiling identifies suitable independent work. It does not replace the application orchestrator.
 
 ### Pebble
 
@@ -73,7 +73,7 @@ MPIRE fits batch transformation experiments more closely than application superv
 
 - Use direct `multiprocessing.Process` ownership for application orchestration.
 - Build a small Spex-specific supervisor around named process specifications and direct process handles.
-- Retain `multiprocessing.connection.Client` and `Listener` for the control plane.
+- Use one Hub-created duplex `multiprocessing.Pipe` per child for the control plane.
 - Integrate process sentinels and control connections with the main event loop rather than polling every service independently.
 - Keep pool libraries outside the orchestration boundary.
 - Evaluate Joblib, Loky, Pebble, or MPIRE only for bounded parallel work inside a service after profiling demonstrates a need.
@@ -83,7 +83,7 @@ MPIRE fits batch transformation experiments more closely than application superv
 
 - Select the explicit multiprocessing start context used across supported platforms.
 - Design the minimal supervisor interface for start, request-stop, observe-exit, and force-stop.
-- Defer restart policy, authenticated IPC, locks, and heartbeat hardening to milestone 2.
+- Defer restart policy, pipe-loss handling, and control-path hardening to milestone 2.
 
 ## Sources
 

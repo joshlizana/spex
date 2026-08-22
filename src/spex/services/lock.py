@@ -8,21 +8,18 @@ import psutil
 from spex.config import SpexConfig
 
 
-class Lock:
-    """Own a role-specific process lock and its identity metadata."""
+class HubLock:
+    """Own the Hub process lock and its replacement metadata."""
 
-    def __init__(self, service: str, session_id: str, instance_id: str):
+    def __init__(self):
         self._lock_file: Path = (
-            SpexConfig().config.runtime_dir / "locks" / f"{service}.lock"
+            SpexConfig().config.runtime_dir / "hub.lock"
         )
         self._lock_fd: int | None = None
         self._pid: int = os.getpid()
         self._create_time: int = int(
             psutil.Process(self._pid).create_time() * 1_000_000
         )
-        self._role: str = service
-        self._session_id: str = session_id
-        self._instance_id: str = instance_id
 
     @property
     def lock_fd(self) -> int | None:
@@ -30,7 +27,7 @@ class Lock:
         return self._lock_fd
 
     def acquire(self) -> None:
-        """Acquire the lock for the service."""
+        """Acquire exclusive ownership of the Spex application session."""
 
         if self._lock_fd is not None:
             raise RuntimeError("Lock is already acquired.")
@@ -44,16 +41,16 @@ class Lock:
         except BlockingIOError:
             self._close_lock()
             raise RuntimeError(
-                f"Another {self._role} process is already running. Cannot acquire lock."
+                "Another hub process is already running. Cannot acquire lock."
             )
         except OSError as e:
             self._close_lock()
-            raise RuntimeError(f"Failed to acquire lock for {self._role}: {e}")
+            raise RuntimeError(f"Failed to acquire lock for hub: {e}")
 
         self.write_metadata()
 
     def release(self) -> None:
-        """Release the lock for the service."""
+        """Release Hub ownership of the Spex application session."""
 
         if self._lock_fd is None:
             raise RuntimeError("Lock is not acquired or already released.")
@@ -69,11 +66,8 @@ class Lock:
             if self._lock_fd is not None:
                 metadata = orjson.dumps(
                     {
-                        "PID": self._pid,
-                        "Create Time": self._create_time,
-                        "Role": self._role,
-                        "Session ID": self._session_id,
-                        "Instance ID": self._instance_id,
+                        "pid": self._pid,
+                        "create_time": self._create_time,
                     }
                 )
                 remaining_bytes = memoryview(metadata)

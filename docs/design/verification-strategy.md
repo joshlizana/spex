@@ -12,11 +12,11 @@ The walking-skeleton verification traces one live post and one backfilled post t
 
 ## Recovery verification
 
-Recovery tests cover interrupted raw writes, checkpoint replay, duplicate delivery, out-of-order batches, unavailable processing, failed DuckLake commits, request-ledger corruption, stale locks, orphan processes, and graceful and forced shutdown.
+Recovery tests cover interrupted raw writes, checkpoint replay, duplicate delivery, out-of-order batches, unavailable processing, failed DuckLake commits, Hub-lock replacement, child pipe loss, and graceful and forced shutdown.
 
 ## Supported-environment verification
 
-Linux and WSL checks cover `platformdirs` paths, permissions, process creation, AF_UNIX communication, advisory locks, termination, and cleanup behavior.
+Linux and WSL checks cover `platformdirs` paths, permissions, process creation, duplex-pipe communication, advisory locks, termination, and cleanup behavior.
 
 ## Performance verification
 

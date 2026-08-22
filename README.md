@@ -55,7 +55,8 @@ The complete application runs six processes:
 - Streamlit dashboard
 - Textual terminal interface
 
-Each process uses a lock file to prevent multiple instances.
+The Hub uses one runtime lock file to prevent multiple application instances. It
+owns and supervises every child process directly.
 
 Component boundaries support focused design and operation within the application.
 

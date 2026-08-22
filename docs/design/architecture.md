@@ -61,7 +61,7 @@ Live ingestion and backfill operate independently and write through one logical 
 
 | Process | Responsibilities |
 | --- | --- |
-| Hub | Main application entry point, orchestration, session ownership, IPC, supervision, configuration, request state, logging, and aggregate health |
+| Hub | Main application entry point, orchestration, session ownership, IPC, supervision, configuration, ephemeral request state, logging, and aggregate health |
 | Textual | Terminal ownership, operator input, configuration views, and operational-health presentation |
 | Live | Current Jetstream ingestion |
 | Backfill | Historical Jetstream ingestion |
@@ -70,7 +70,7 @@ Live ingestion and backfill operate independently and write through one logical 
 
 The Hub is the orchestrator and main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting either ingestion process ensures that validation and transformation runs. Processing drains and stops after the final ingestion process stops.
 
-See [Process Control](process-control.md) for IPC, identity, supervision, locking, request-ledger, and shutdown behavior.
+See [Process Control](process-control.md) for IPC, identity, supervision, locking, request tracking, and shutdown behavior.
 
 ## Layer and dependency model
 
@@ -90,7 +90,7 @@ Data
 ├── Ephemeral raw retention
 ├── DuckLake and rejected records
 ├── Checkpoints and service state
-├── Request ledger
+├── Ephemeral request state
 └── Configuration and credentials
 
 Platform capabilities support every internal layer.
@@ -113,7 +113,7 @@ See [Pipeline and Data Flow](pipeline-data-flow.md) for ingestion, raw retention
 
 The Hub is the application orchestrator, control plane, and main process. The Textual child process is its terminal-facing control and operational-health interface. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
 
-The `spex` command launches the orchestrator, which binds IPC and spawns Textual and the application services. TUI actions request service transitions through IPC. Closing the TUI requests shutdown of the complete application.
+The `spex` command launches the orchestrator, which creates child control pipes and spawns Textual and the application services. TUI actions request service transitions through IPC. Closing the TUI requests shutdown of the complete application.
 
 ## Deployment and dependencies
 

@@ -4,6 +4,8 @@ This file separates the implementation roadmap from its supporting decisions and
 
 ## Implementation roadmap
 
+The active control-plane rewrite follows the file-by-file checklist in [Control-plane refactor TODO](REFACTOR_TODO.md).
+
 ### 0. Deliver the walking skeleton
 
 This deliberately thin slice proves both complete ingestion paths with one live post and one backfilled post before hardening any component.
@@ -25,15 +27,16 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 
 - [x] Define the walking-skeleton service state as the `running` and `paused` booleans, with `running=false` taking precedence.
 - [ ] Create the dedicated main-process orchestrator and explicit `spawn` context.
-- [ ] Bind the authenticated orchestrator listener before spawning Textual.
+- [ ] Create a dedicated duplex control pipe before spawning each child.
+- [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [ ] Spawn Textual as a non-daemonic IPC spoke with inherited terminal streams.
-- [ ] Complete the TUI hello, initial-state, shutdown-request, connection-loss, and exit lifecycle.
+- [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
 - [ ] Define the walking-skeleton service transitions.
 - [ ] Add Textual controls for starting and stopping live ingestion and backfill.
 - [ ] Start validation and transformation automatically with either ingestion service.
 - [ ] Launch every child with `multiprocessing.Process` and retain its process handle.
-- [ ] Monitor one orchestrator-owned `multiprocessing.connection.Listener` independently of Textual.
-- [ ] Connect each spoke to the listener and associate the connection with its role.
+- [ ] Monitor orchestrator-owned child pipe endpoints independently of Textual.
+- [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
 - [x] Define the minimal control and health messages needed by the slice.
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
 - [ ] Show actual child-process and connection state in the Textual status view.
@@ -105,9 +108,9 @@ The slice excludes persistent credential storage, complete collection coverage, 
 
 - [ ] Expand the walking-skeleton orchestrator to own child-process supervision and authoritative control state.
 - [ ] Generalize skeletal child launch into reusable worker supervision.
-- [ ] Harden control connections with authentication and AF_UNIX transport.
-- [ ] Complete hello, readiness, heartbeat, shutdown, restart, and orphan-cleanup flows.
-- [ ] Persist command state in the session request ledger.
+- [ ] Harden duplex-pipe ownership, closure, and concurrent-send behavior.
+- [ ] Complete readiness, shutdown, restart, and pipe-loss flows.
+- [ ] Track command state in the ephemeral session request ledger.
 - [ ] Verify the complete worker lifecycle before adding pipeline behavior.
 
 ### 3. Establish reproducible pipeline input
@@ -213,14 +216,12 @@ Resolve these items when their roadmap increment becomes active.
 - [x] Assign the spawned Textual spoke to the main-process orchestrator.
 - [ ] Verify spawned Textual terminal input, rendering, resize handling, graceful exit, hub-loss exit, terminal restoration, and return-code propagation on Linux and WSL.
 - [ ] Test advisory-lock exclusivity and process-exit release on Linux and WSL.
-- [ ] Test stable in-place JSON lock-metadata writes and concurrent reads.
+- [ ] Test stable in-place Hub-lock metadata writes and concurrent reads.
 - [ ] Test session-ID stability across worker restarts and renewal across orchestrator replacement.
-- [ ] Test service-instance ID renewal and main-process session-ID reuse.
+- [ ] Test service-instance ID renewal, main-process session-ID reuse, and per-process logging context.
 - [ ] Define and test Linux and WSL process-identity validation for forced Hub termination.
 - [ ] Test current-session process-handle restart and old-session manual-intervention fallback.
-- [ ] Test all-service orphan discovery, heartbeat-window shutdown, and platform-specific forced termination.
-- [ ] Test degraded health when an orphan cannot be terminated.
-- [ ] Test the replacement-startup race between final lock retry and old-worker heartbeat-loss shutdown.
+- [ ] Test child shutdown after Hub pipe loss and forced termination through retained process handles.
 
 ## 2. Orchestrator and control plane
 
@@ -234,35 +235,26 @@ Resolve these items when their roadmap increment becomes active.
 
 ### IPC transport and protocol
 
-- [ ] Define the AF_UNIX address and same-user endpoint permissions.
-- [ ] Validate memory-only IPC authentication-key transfer under each supported multiprocessing start method.
-- [ ] Define the IPC protocol-version representation and negotiation error schema.
-- [ ] Define strict UTF-8 JSON message schemas and error responses.
-- [ ] Define and test `hello` and `hello_ack`, lock-backed validation, five-second timeouts, and readiness transition.
-- [ ] Test session and service identity tagging, connection association, mismatch rejection, health display, and log correlation.
-- [ ] Test duplicate connection rejection and same-instance reconnection.
-- [ ] Define and test heartbeat acknowledgments and three-miss connection failure.
-- [ ] Test exhausted IPC reconnection, degraded status, and manual service restart.
-- [ ] Review the absence of an IPC message-size limit if the trust boundary changes.
+- [ ] Verify duplex `Connection` transfer under the explicit `spawn` context.
+- [ ] Verify that both processes close unused pipe endpoints and detect peer loss through EOF.
+- [ ] Define the readiness protocol-version representation and mismatch response.
+- [ ] Define the native dictionary payloads and error responses required by the walking skeleton.
+- [ ] Define and test initial-state validation and readiness transition.
+- [ ] Test connection-bound service identity, health display, and log correlation.
+- [ ] Test one pipe per process instance and fresh-pipe creation on restart.
+- [ ] Test pipe loss, degraded status, and manual service restart.
+- [ ] Review pickle trust and the absence of an IPC message-size limit if the inherited-pipe boundary changes.
 
-### Command lifecycle and request ledger
+### Command lifecycle and ephemeral request ledger
 
 - [ ] Define command response schemas and allowed request states.
 - [ ] Finalize manual retry identity behavior during IPC implementation.
-- [ ] Define SQLite constraints for message ID, status, creation time, and last-update time.
-- [ ] Define partial-success and crash handling for concurrent command dispatch and ledger insertion.
-- [ ] Test same-ID dispatch retries and replacement ledger writes with current status.
+- [ ] Define the in-memory entry structure for message ID, status, creation time, and last-update time.
+- [ ] Test recording a request before dispatch and updating its current status.
 - [ ] Test idempotent duplicate-request handling.
 - [ ] Test late acceptance, completion, and failure reconciliation for unknown requests.
 - [ ] Test direct manual retry after ledger expiration.
-- [ ] Test degraded ledger health while commands continue and automatic recovery after a successful write.
-- [ ] Test WAL mode under SQLite lock and busy conditions.
-- [ ] Test schema-version mismatch recreation.
-- [ ] Test runtime corruption disposal, automatic ledger recreation, and health recovery.
-- [ ] Test request-ledger cleanup target validation and symbolic-link refusal.
-- [ ] Test exhausted prior-session deletion while a fresh session ledger operates.
-- [ ] Test disk-full and I/O retry exhaustion while commands continue.
-- [ ] Validate inherited Windows permissions for the per-user ledger directory.
+- [ ] Test one-hour entry expiration and complete disposal on Hub exit.
 - [ ] Profile command completion durations and select command-specific timeouts.
 
 ## 3. Test-data and profiling foundation

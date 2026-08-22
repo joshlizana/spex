@@ -51,8 +51,7 @@ user_state_path/
 └── services/
 
 user_runtime_path/
-├── locks/
-└── ipc/
+└── hub.lock
 
 user_log_path/
 └── spex.jsonl
@@ -60,7 +59,7 @@ user_log_path/
 user_cache_path/
 ```
 
-The `ipc` name covers Unix-domain sockets and related runtime endpoint metadata. Windows named pipes do not require filesystem socket entries.
+Control pipes are inherited process resources and require no runtime filesystem path.
 
 The M0 subset is:
 
@@ -70,9 +69,7 @@ user_data_path/
 ├── raw/backfill/
 └── ducklake/
 
-user_runtime_path/
-├── locks/
-└── ipc/
+user_runtime_path/hub.lock
 
 user_config_path/config.json
 ```

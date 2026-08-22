@@ -21,7 +21,6 @@ class StatusCircle(Static):
 class Spex(App):
     """Provide the Spex Textual control plane and operational interface."""
 
-
     DEFAULT_CSS = """
     Horizontal {
         height: 1;
@@ -46,12 +45,13 @@ class Spex(App):
 
     """
 
-    BINDINGS = [("q", "quit", "Quit"),
-                ("l", "start_live_service", "Start Live Service"),
-                ("b", "start_backfill_service", "Start Backfill Service"),
-                ("p", "pause_service", "Pause Service"),
-                ("r", "resume_service", "Resume Service")]
-
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("l", "start_live_service", "Start Live Service"),
+        ("b", "start_backfill_service", "Start Backfill Service"),
+        ("p", "pause_service", "Pause Service"),
+        ("r", "resume_service", "Resume Service"),
+    ]
 
     def compose(self) -> ComposeResult:
         """Compose the walking-skeleton application shell."""
