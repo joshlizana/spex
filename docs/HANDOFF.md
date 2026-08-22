@@ -24,7 +24,13 @@ Complete the thin walking-skeleton control plane before implementing Jetstream o
 
 ## Resume point
 
-Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with command dispatch and the in-memory request ledger. The concrete request-ID representation remains unresolved until this implementation requires it. Complete the Hub review before modifying TUI integration.
+Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with command dispatch and the in-memory request ledger. The concrete request-ID representation remains unresolved until this implementation requires it. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, "late acceptance restarts the timer") until a real situation demonstrates the need; the ledger keeps only synchronized ID allocation and duplicate-ID idempotency for now. Complete the Hub review before modifying TUI integration.
+
+Hub review findings from this session, still open:
+
+1. An unmatched or invalid message from a child raises inside `_handle_message` and crashes `run()`. Intentional for this stage — failures surface loudly rather than being handled defensively; revisit only when a real failure demonstrates a need for graceful handling.
+2. `_join_service`'s join/terminate/kill escalation runs synchronously inside `run()`'s single-threaded loop, so a slow-exiting child can stall supervision of every other service for the length of its escalation. Unlike (1), this is a present defect, not a deferred edge case.
+3. Direction under discussion for (2): move `run()` from `connection.wait()` polling to an `asyncio` event loop, using `loop.add_reader()` per pipe/sentinel fd, with each departing service's escalation running as its own task instead of blocking the loop. Leaning this direction, not finalized. Open questions: task-exception visibility (asyncio silently drops exceptions from unreferenced tasks, which conflicts with (1)'s fail-fast stance) and the `__enter__`/`__exit__` shutdown lifecycle around an async `run()`. Revisit at implementation time.
 
 After step 8:
 

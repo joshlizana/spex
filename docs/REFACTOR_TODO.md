@@ -25,7 +25,7 @@ Continue step 8 with Hub command dispatch and the in-memory request ledger. Keep
 
 Complete and review one numbered file step before beginning the next. Keep each intermediate step importable. Record an intentional temporary integration gap in this checklist when a later step must close it.
 
-Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need.
+Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
 Current integration gap: Hub command dispatch and its in-memory request ledger remain unimplemented.
 
@@ -96,7 +96,7 @@ Current integration gap: Hub command dispatch and its in-memory request ledger r
 - [x] Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] Store each parent endpoint with its role and process handle.
 - [x] Monitor pipe endpoints and process sentinels without listener or handler threads.
-- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton.
+- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, retry-timer restart) until a real situation demonstrates the need; keep only ID allocation and duplicate-ID idempotency for now.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
 - [ ] Review the file before continuing.

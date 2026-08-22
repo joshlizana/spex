@@ -51,8 +51,6 @@ class Hub:
         """Run the Spex Hub supervision loop."""
 
         while self._running:
-            # Reserve this branch for process supervision and IPC work.
-
             waitables = {}
             for role, service in self._services.items():
                 waitables[service.pipe] = (role, "message")
@@ -67,19 +65,15 @@ class Hub:
                 if event_type == "message":
                     try:
                         message = service.pipe.recv()
-                        # Handle the received message from the service.
                         self._handle_message(role, message)
                     except (EOFError, OSError):
-                        # The service has closed its pipe; handle cleanup.
                         self._join_service(role)
                 elif event_type == "exit":
-                    # The service process has exited; handle cleanup.
                     self._join_service(role)
 
     def _handle_message(self, role: str, message: dict):
         """Handle a message received from a specific service."""
 
-        # Implement message handling logic based on the role and message content.
         match message.get("type"):
             case "state":
                 payload = message.get("payload")
