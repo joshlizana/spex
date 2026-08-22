@@ -10,7 +10,9 @@ The `spex` console entry point launches a dedicated main-process orchestrator. I
 
 The orchestrator creates Textual and every named service child with `multiprocessing.Process` under one explicit `spawn` context and retains each direct process handle. All application process spawning uses multiprocessing. Pool executors remain outside application orchestration.
 
-The orchestrator creates one duplex control pipe before spawning each child and passes one endpoint to that child. It retains the other endpoint under the child's known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through their pipe.
+The orchestrator creates one duplex control pipe before spawning the Textual child and passes one endpoint to it, retaining the other under its known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through this pipe.
+
+Live, backfill, and pipeline children receive no pipe. The orchestrator tracks each as running or stopped from its own process registry alone and stops one directly with `process.terminate()`.
 
 ## Resource ownership
 
@@ -20,39 +22,41 @@ Individual files and pipe connections use their context-manager interfaces direc
 
 ## Walking-skeleton service state
 
-M0 represents each service with two boolean fields: `running` and `paused`. When `running` is `false`, the service is inactive and the value of `paused` has no operational effect. When `running` is `true`, `paused=false` means active processing and `paused=true` means processing is paused.
+M0 represents each worker (live, backfill, pipeline) with one field: `running`. There is no paused state; a worker is either running or stopped.
 
-A newly spawned worker starts with `running=true` and `paused=false`. The Hub spawns a worker in response to an operator start action, so startup begins work directly.
+A newly spawned worker starts running. The Hub spawns a worker in response to an operator start action, so startup begins work directly. The Hub stops a worker with `process.terminate()` (`SIGTERM`). A shared `ServiceProcess` handler catches the signal and ends the worker's current work cycle gracefully before exit.
 
 ## Process identity
 
-The Hub identifies each service through the role, process handle, and pipe endpoint stored in its process registry. Session and instance identifiers remain outside the walking-skeleton control contract.
+The Hub identifies each service through the role and process handle stored in its process registry, plus a pipe endpoint for the TUI. Session and instance identifiers remain outside the walking-skeleton control contract.
 
 ## IPC transport
 
-The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` for each child from the application `spawn` context. The orchestrator and child close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted child receives a new pipe.
+The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` from the application `spawn` context for the TUI child only. The orchestrator and the TUI close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted TUI receives a new pipe.
 
-The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. Processes exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes.
+The Hub retains the TUI's parent endpoint under its role and process handle, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to this inherited pipe. No other child sends or receives a message.
 
 Every message contains a `type` and `payload`. A message includes a `message_id` when it belongs to a request-response exchange. Role identity remains connection context rather than a repeated message field. The initial state reports the protocol version once during readiness.
 
 ## Child readiness
 
-A child's first message carries its initial state and protocol version. The orchestrator associates it with the role and process handle recorded when launching the child.
+The TUI's first message carries its initial state and protocol version. The orchestrator associates it with the role and process handle recorded when launching it.
 
-The child becomes ready after the Hub accepts its initial state. Pipe creation and transfer occur as part of process creation and have no connection retry or hello acknowledgment.
+The TUI becomes ready after the Hub accepts its initial state. Pipe creation and transfer occur as part of process creation and have no connection retry or hello acknowledgment.
 
 Acknowledgment message types use the `<type>_ack` naming convention. An acknowledgment confirms receipt or protocol acceptance and does not represent completion of an asynchronous operation.
 
 State exchange uses two message types. `state_request` asks the Hub for current state. `state` carries either one service update or a complete service snapshot, with its payload identifying the included scope.
 
-Service-control message types use the concise names `start`, `stop`, `pause`, and `resume`. Connection context and payload identify the affected service. `application_shutdown` remains distinct because it stops the complete application session.
+Service-control message types use the concise names `start` and `stop`. There is no `pause` or `resume`; a service is only running or stopped. Connection context and payload identify the affected service. `application_shutdown` remains distinct because it stops the complete application session.
 
 Command-result message types use `accepted`, `completed`, and `failed`. They reuse the originating command's message ID. `error` remains reserved for protocol or request errors rather than an accepted command that fails during execution.
 
-An invalid initial-state message or protocol mismatch closes the pipe and marks the service degraded. One pipe exists per service instance.
+An invalid initial-state message or protocol mismatch closes the TUI pipe and marks it degraded.
 
-After readiness, an invalid message closes the connection and marks the service degraded. An unknown message type returns an error without closing the connection. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
+After readiness, an invalid message closes the connection and marks the TUI degraded. An unknown message type returns an error without closing the connection. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
+
+The walking skeleton departs from this readiness/degrade contract for the moment: an unmatched or invalid message currently crashes the Hub rather than closing the connection gracefully. This is intentional — see the Working rule in `REFACTOR_TODO.md` for the fail-fast rationale.
 
 ## Message identity and ordering
 
@@ -62,23 +66,21 @@ New orchestrator messages allocate a sequence. Responses and errors reuse their 
 
 ## Health and connection loss
 
-The Hub monitors child process sentinels and pipe endpoints. Pipe EOF triggers graceful child shutdown or marks the child unavailable at the Hub. Command timeouts identify an unresponsive child that remains alive. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
+The Hub monitors every child's process sentinel and, for the TUI, its pipe endpoint. TUI pipe EOF triggers its graceful shutdown or marks it unavailable at the Hub. Live, backfill, and pipeline have no pipe to lose; the Hub tracks each from its process registry and sentinel alone. Command timeouts identify an unresponsive TUI that remains alive. A restarted TUI receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
 
-Hub shutdown closes the service pipe before joining so pipe EOF starts the child's graceful exit. The Hub joins with the standard retry intervals, sends termination when the process remains alive, waits five seconds, then kills and joins a process that still remains alive. It removes the process from its registry only after confirmed exit.
+Hub shutdown stops the TUI by closing its pipe before joining, so pipe EOF starts its graceful exit. It stops live, backfill, and pipeline directly with `SIGTERM`, which their shared `ServiceProcess` handler turns into a graceful exit. Every child then joins with the standard retry intervals, escalates to `terminate()` and a five-second wait if still alive, then kills and joins a process that still remains alive. It removes the process from its registry only after confirmed exit.
 
 ## Command lifecycle
 
-The orchestrator records each command in an in-memory request ledger before dispatch. Dispatch retries preserve the request identity. Exhausted dispatch transitions the request to `failed`.
+The orchestrator records each command in an in-memory request ledger before dispatch, allocating a synchronized message ID. Request states are `pending`, `completed`, and `failed`, driven only by messages the Hub actually receives. The walking skeleton defers the rest of this section's original target until a real situation demonstrates the need.
 
-Request states are `pending`, `accepted`, `completed`, `failed`, and `unknown`. `completed` and `failed` are terminal. Completion confirms the requested operational state. A failed-command retry creates a new request ID. A manual retry of an `unknown` request uses the same ID and requires no confirmation.
-
-The orchestrator waits one second for acceptance. Missing acceptance or a command-specific completion timeout produces `unknown` without automatic command retry. Late acceptance restarts the completion timer. Late completion or failure resolves the request and removes its manual retry action.
+Deferred target: `accepted` and `unknown` states; a one-second acceptance timeout and a command-specific completion timeout, both producing `unknown` when missed; "late acceptance restarts the completion timer"; a failed-command retry creating a new request ID; a manual retry of an `unknown` request reusing the same ID.
 
 ## Request ledger
 
-The Hub owns an in-memory request ledger for the application session. It stores message ID, status, creation time, and last-update time. Times use UTC Unix microseconds. It excludes command payloads, results, credentials, and secret values. Duplicate IDs return stored status without executing again.
+The Hub owns an in-memory request ledger for the application session, storing at minimum each message ID and its status. It excludes command payloads, results, credentials, and secret values. Hub exit discards the complete ledger because a new Hub begins a new application session.
 
-The ledger expires records older than one hour. A retry remains available after its ledger entry expires. Hub exit discards the complete ledger because a new Hub begins a new application session.
+Deferred target, same basis as above: creation and last-update timestamps in UTC Unix microseconds; one-hour expiry with retry still available after expiry; duplicate-ID short-circuiting, returning stored status instead of executing again. UUID message IDs keep accidental ID collision out of scope independent of this deferral — duplicates only arise from the deferred retry path.
 
 ## Process lock
 
@@ -90,11 +92,13 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. Closing the old Hub's pipe endpoints causes its children to follow their graceful pipe-loss shutdown paths. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
+A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. Closing the old Hub's TUI pipe causes the old TUI to follow its graceful pipe-loss shutdown path. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
+
+Open: live, backfill, and pipeline have no pipe, so they have no signal that an old Hub died when a new invocation replaces it. How these workers get reaped during replacement is unresolved — see Open questions.
 
 ## Application shutdown
 
-Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops Streamlit and all pipeline workers through their component-specific graceful shutdown paths, asks Textual to exit, joins every child, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure triggers spoke shutdown through pipe loss.
+Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every worker directly — `SIGTERM` for live, backfill, and pipeline, pipe closure for the TUI — joins every child, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure triggers the TUI's shutdown through pipe loss; live, backfill, and pipeline have no equivalent signal, the same open gap as replacement above.
 
 ## Standard retry policy
 
@@ -106,3 +110,4 @@ Every retrying operation uses four exponential intervals within a 15-second retr
 - What payload fields do the final command and error messages require?
 - How does the orchestrator assign request identity to operator intents originating in the TUI?
 - What concrete request-ID representation does the Hub use?
+- How do live, backfill, and pipeline detect Hub loss without a pipe — both for an unexpected orchestrator failure and for Hub replacement?
