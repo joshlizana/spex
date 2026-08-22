@@ -107,7 +107,6 @@ class ServiceProcess(SpawnProcess):
         if self._running:
             self._running = False
 
-
     def _state(self, message_id: str):
         """Return the current operational state in a correlated envelope."""
         if self._running and not self._paused:

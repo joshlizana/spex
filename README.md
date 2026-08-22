@@ -66,6 +66,7 @@ See [`docs/design/architecture.md`](docs/design/architecture.md) for the system 
 
 - [`CHANGELOG.md`](CHANGELOG.md) records notable project changes.
 - [`docs/TODO.md`](docs/TODO.md) tracks open project and documentation work.
+- [`docs/HANDOFF.md`](docs/HANDOFF.md) summarizes the current continuation point for collaborating agents.
 - [`docs/design/`](docs/design/) contains design specifications and explorations.
 - [`docs/decisions/`](docs/decisions/) records durable project decisions.
 - [`docs/research/`](docs/research/) contains research notes and sources.
