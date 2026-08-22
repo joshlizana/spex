@@ -24,7 +24,7 @@ Complete the thin walking-skeleton control plane before implementing Jetstream o
 
 ## Resume point
 
-Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with command dispatch and the in-memory request ledger. The concrete request-ID representation remains unresolved until this implementation requires it. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, "late acceptance restarts the timer") until a real situation demonstrates the need; the ledger keeps only synchronized ID allocation and duplicate-ID idempotency for now. Complete the Hub review before modifying TUI integration.
+Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with command dispatch and the in-memory request ledger. The concrete request-ID representation remains unresolved until this implementation requires it. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, "late acceptance restarts the timer") until a real situation demonstrates the need. Duplicate-ID idempotency depends on that same deferred retry path and is deferred with it; UUID message IDs keep accidental collision out of scope regardless. The ledger keeps only synchronized ID allocation for now. Complete the Hub review before modifying TUI integration.
 
 Hub review findings from this session, still open:
 

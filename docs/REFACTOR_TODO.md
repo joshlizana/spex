@@ -96,7 +96,7 @@ Current integration gap: Hub command dispatch and its in-memory request ledger r
 - [x] Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] Store each parent endpoint with its role and process handle.
 - [x] Monitor pipe endpoints and process sentinels without listener or handler threads.
-- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, retry-timer restart) until a real situation demonstrates the need; keep only ID allocation and duplicate-ID idempotency for now.
+- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, retry-timer restart) until a real situation demonstrates the need. Duplicate-ID idempotency depends on that same deferred retry path, so it is deferred with it; UUID message IDs keep accidental collision out of scope regardless. Keep only synchronized ID allocation for now.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
 - [ ] Review the file before continuing.
