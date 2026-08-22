@@ -2,7 +2,13 @@
 
 Status: active
 
-This checklist replaces listener-based IPC with Hub-created duplex pipes while preserving a reviewable, file-at-a-time workflow. Joshua implements application behavior. Codex reviews each completed file and maintains its documentation, comments, and docstrings.
+This checklist replaces listener-based IPC with Hub-created duplex pipes while preserving a reviewable, file-at-a-time workflow. Joshua implements application behavior. Agents review each completed file and maintain its documentation, comments, and docstrings.
+
+## Resume here
+
+Steps 1 through 7 are complete. Step 8 has a reviewed process registry, Hub-owned pipe creation, sentinel and pipe monitoring, state handling, graceful pipe-loss shutdown, standard join intervals, and forced-exit escalation.
+
+Continue step 8 with Hub command dispatch and the in-memory request ledger. Keep the concrete request-ID representation unresolved until that implementation requires it. Complete the remaining Hub review before starting the TUI integration in step 9.
 
 ## Confirmed target
 
@@ -90,7 +96,7 @@ Current integration gap: Hub command dispatch and its in-memory request ledger r
 - [x] Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] Store each parent endpoint with its role and process handle.
 - [x] Monitor pipe endpoints and process sentinels without listener or handler threads.
-- [ ] Add the in-memory request ledger and session-wide request sequence needed by the walking skeleton.
+- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
 - [ ] Review the file before continuing.
