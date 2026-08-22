@@ -10,9 +10,9 @@ The `spex` console entry point launches a dedicated main-process orchestrator. I
 
 The orchestrator creates Textual and every named service child with `multiprocessing.Process` under one explicit `spawn` context and retains each direct process handle. All application process spawning uses multiprocessing. Pool executors remain outside application orchestration.
 
-The orchestrator creates one duplex control pipe before spawning the Textual child and passes one endpoint to it, retaining the other under its known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through this pipe.
+The orchestrator creates one duplex control pipe before spawning each child and passes one endpoint to it, retaining the other under its known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through this pipe.
 
-Live, backfill, and pipeline children receive no pipe. The orchestrator tracks each as running or stopped from its own process registry alone and stops one directly with `process.terminate()`.
+Live, backfill, and pipeline never exchange a message on their pipe. Its only purpose for these three is detecting Hub loss through EOF; the orchestrator otherwise tracks each as running or stopped from its own process registry and stops one directly with `process.terminate()`.
 
 ## Resource ownership
 
@@ -28,13 +28,13 @@ A newly spawned worker starts running. The Hub spawns a worker in response to an
 
 ## Process identity
 
-The Hub identifies each service through the role and process handle stored in its process registry, plus a pipe endpoint for the TUI. Session and instance identifiers remain outside the walking-skeleton control contract.
+The Hub identifies each service through the role, process handle, and pipe endpoint stored in its process registry. Session and instance identifiers remain outside the walking-skeleton control contract.
 
 ## IPC transport
 
-The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` from the application `spawn` context for the TUI child only. The orchestrator and the TUI close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted TUI receives a new pipe.
+The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` for each child from the application `spawn` context. The orchestrator and child close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted child receives a new pipe.
 
-The Hub retains the TUI's parent endpoint under its role and process handle, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to this inherited pipe. No other child sends or receives a message.
+The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes. Live, backfill, and pipeline never send or receive a message on their pipe — its only purpose is detecting Hub loss through EOF. Each of these workers checks it with a non-blocking `poll()` once per work cycle; no background thread is needed, since nothing else ever uses the connection.
 
 Every message contains a `type` and `payload`. A message includes a `message_id` when it belongs to a request-response exchange. Role identity remains connection context rather than a repeated message field. The initial state reports the protocol version once during readiness.
 
@@ -66,9 +66,9 @@ New orchestrator messages allocate a sequence. Responses and errors reuse their 
 
 ## Health and connection loss
 
-The Hub monitors every child's process sentinel and, for the TUI, its pipe endpoint. TUI pipe EOF triggers its graceful shutdown or marks it unavailable at the Hub. Live, backfill, and pipeline have no pipe to lose; the Hub tracks each from its process registry and sentinel alone. Command timeouts identify an unresponsive TUI that remains alive. A restarted TUI receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
+The Hub monitors every child's process sentinel and pipe endpoint. TUI pipe EOF triggers its graceful shutdown or marks it unavailable at the Hub. For live, backfill, and pipeline, pipe EOF means the Hub itself is gone — the Hub never closes a worker's pipe as a targeted stop signal the way it does for the TUI, since operator-initiated stop uses `SIGTERM` instead. Command timeouts identify an unresponsive TUI that remains alive. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
 
-Hub shutdown stops the TUI by closing its pipe before joining, so pipe EOF starts its graceful exit. It stops live, backfill, and pipeline directly with `SIGTERM`, which their shared `ServiceProcess` handler turns into a graceful exit. Every child then joins with the standard retry intervals, escalates to `terminate()` and a five-second wait if still alive, then kills and joins a process that still remains alive. It removes the process from its registry only after confirmed exit.
+Hub shutdown stops the TUI by closing its pipe before joining, so pipe EOF starts its graceful exit. It stops live, backfill, and pipeline directly with `SIGTERM`, which their shared `ServiceProcess` handler turns into a graceful exit; closing their pipes during the same shutdown gives them a second, redundant signal of the same thing. Every child then joins with the standard retry intervals, escalates to `terminate()` and a five-second wait if still alive, then kills and joins a process that still remains alive. It removes the process from its registry only after confirmed exit.
 
 ## Command lifecycle
 
@@ -92,13 +92,11 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. Closing the old Hub's TUI pipe causes the old TUI to follow its graceful pipe-loss shutdown path. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
-
-Open: live, backfill, and pipeline have no pipe, so they have no signal that an old Hub died when a new invocation replaces it. How these workers get reaped during replacement is unresolved — see Open questions.
+A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. Closing the old Hub's pipe endpoints causes every child, including live, backfill, and pipeline, to see EOF and follow its graceful shutdown path — the same detection each of them already uses for an unexpected Hub failure. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
 
 ## Application shutdown
 
-Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every worker directly — `SIGTERM` for live, backfill, and pipeline, pipe closure for the TUI — joins every child, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure triggers the TUI's shutdown through pipe loss; live, backfill, and pipeline have no equivalent signal, the same open gap as replacement above.
+Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops live, backfill, and pipeline with `SIGTERM` and stops the TUI by closing its pipe, joins every child, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure triggers every child's shutdown through pipe loss — the TUI through its protocol-driven graceful-exit path, and live, backfill, and pipeline through the same EOF detection that also covers Hub replacement.
 
 ## Standard retry policy
 
@@ -110,4 +108,3 @@ Every retrying operation uses four exponential intervals within a 15-second retr
 - What payload fields do the final command and error messages require?
 - How does the orchestrator assign request identity to operator intents originating in the TUI?
 - What concrete request-ID representation does the Hub use?
-- How do live, backfill, and pipeline detect Hub loss without a pipe — both for an unexpected orchestrator failure and for Hub replacement?

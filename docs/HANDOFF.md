@@ -13,12 +13,12 @@ Complete the thin walking-skeleton control plane before implementing Jetstream o
 - The Hub runs in the main process under an explicit multiprocessing `spawn` context.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
 - Live ingestion, backfill, and pipeline workers inherit `ServiceProcess`. This is being reworked — see "Reopened this session" below.
-- Only the TUI child receives a Hub-created duplex `multiprocessing.Pipe`. Live, backfill, and pipeline get none.
+- Every child receives a Hub-created duplex `multiprocessing.Pipe`. Only the TUI's ever carries a message; live, backfill, and pipeline poll theirs once per work cycle purely to detect Hub loss through EOF.
 - The Hub and the TUI exchange native dictionaries through `Connection.send()` and `Connection.recv()`. No other child sends or receives a message.
-- Pipe ownership supplies TUI identity; its control messages do not repeat session or instance identifiers.
-- The Hub monitors the TUI pipe endpoint and every child's process sentinel through `multiprocessing.connection.wait()`.
-- TUI pipe EOF initiates its graceful shutdown. Live, backfill, and pipeline stop through a shared `ServiceProcess` `SIGTERM` handler instead, triggered by `process.terminate()`.
-- Hub cleanup closes the TUI pipe, joins with the standard 1-, 2-, 4-, and 8-second intervals, waits five seconds after termination, then kills and joins a process that remains alive.
+- Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
+- The Hub monitors every pipe endpoint and every child's process sentinel through `multiprocessing.connection.wait()`.
+- TUI pipe EOF initiates its graceful shutdown. Live, backfill, and pipeline use the same EOF signal to detect an unexpected Hub loss, but their operator-initiated stop goes through a shared `ServiceProcess` `SIGTERM` handler instead, triggered by `process.terminate()`.
+- Hub cleanup closes every pipe, joins with the standard 1-, 2-, 4-, and 8-second intervals, waits five seconds after termination, then kills and joins a process that remains alive.
 - Textual lives in `src/spex/services/tui.py` and remains a placeholder launched directly by the entry point.
 - Dashboard supervision remains a placeholder without worker-control IPC.
 
@@ -32,7 +32,7 @@ Hub review findings from this session, still open:
 2. `_join_service`'s join/terminate/kill escalation runs synchronously inside `run()`'s single-threaded loop, so a slow-exiting child can stall supervision of every other service for the length of its escalation. Unlike (1), this is a present defect, not a deferred edge case.
 3. Direction under discussion for (2): move `run()` from `connection.wait()` polling to an `asyncio` event loop, using `loop.add_reader()` per pipe/sentinel fd, with each departing service's escalation running as its own task instead of blocking the loop. Leaning this direction, not finalized. Open questions: task-exception visibility (asyncio silently drops exceptions from unreferenced tasks, which conflicts with (1)'s fail-fast stance) and the `__enter__`/`__exit__` shutdown lifecycle around an async `run()`. Revisit at implementation time.
 
-Reopened this session — steps 4, 5, 6, and part of 8 in `REFACTOR_TODO.md`: `pause`/`resume` are dropped entirely; a service is only running or stopped. `stop` moves from a pipe message to `process.terminate()` (`SIGTERM`), handled by a shared handler in `ServiceProcess` that ends the current work cycle gracefully. Live, backfill, and pipeline no longer take a pipe at all — the Hub already knows running/stopped from its own process registry, and sentinels alone report exit. Only the TUI keeps a pipe, since it starts at launch rather than on operator command and needs real two-way traffic. See `REFACTOR_TODO.md`'s "Resume here" for the full target and the reopened per-file checklists.
+Reopened this session — steps 4, 5, 6, and part of 8 in `REFACTOR_TODO.md`: `pause`/`resume` are dropped entirely; a service is only running or stopped. Operator-initiated stop moves from a pipe message to `process.terminate()` (`SIGTERM`), handled by a shared handler in `ServiceProcess` that ends the current work cycle gracefully. Live, backfill, and pipeline keep their pipe, but only to detect Hub loss — nothing is ever sent on it, a non-blocking `poll()` once per cycle is enough, no background thread needed. The TUI's pipe is the one carrying real two-way traffic, since it starts at launch rather than on operator command. See `REFACTOR_TODO.md`'s "Resume here" for the full target and the reopened per-file checklists.
 
 After step 8:
 

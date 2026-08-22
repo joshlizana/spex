@@ -8,18 +8,18 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 Steps 1 through 3 and 7 are complete and stand. Steps 4, 5, 6, and part of 8 are reopened: their checklists assumed a Hub-owned pipe on every child, and that assumption no longer holds (see below).
 
-New target for live, backfill, and pipeline: drop `pause`/`resume` entirely, a service is only running or stopped. `start` stays spawn-only. `stop` moves to `process.terminate()` (`SIGTERM`) with no pipe involved. `ServiceProcess` installs a shared `SIGTERM` handler so the current work cycle ends gracefully; each subclass still only differs in its unit of work per cycle. Live, backfill, and pipeline receive no pipe at all — the Hub tracks running/stopped from its own process registry, and process sentinels alone report exit. Only the TUI child (step 9) is a genuine two-way exception and keeps a Hub-owned pipe, because it is the one service started at launch rather than on operator command, and it needs real operator-intent/state traffic.
+New target for live, backfill, and pipeline: drop `pause`/`resume` entirely, a service is only running or stopped. `start` stays spawn-only. Operator-initiated `stop` moves to `process.terminate()` (`SIGTERM`) — `ServiceProcess` installs a shared handler so the current work cycle ends gracefully; each subclass still only differs in its unit of work per cycle. Each of the three still receives a Hub-owned pipe, but only to detect Hub loss: nothing is ever sent on it, and a non-blocking `poll()` once per work cycle (no background thread) is enough to notice EOF and stop the same way `SIGTERM` does. The TUI child (step 9) is the one genuine two-way exception — it is the service started at launch rather than on operator command, and its pipe carries real operator-intent/state traffic.
 
 Continue step 8 with Hub command dispatch and the in-memory request ledger. Keep the concrete request-ID representation unresolved until that implementation requires it. Complete the remaining Hub review before starting the TUI integration in step 9.
 
 ## Confirmed target
 
 - The Hub creates every child process and retains its process handle.
-- The Hub creates a duplex `multiprocessing.Pipe` only for the TUI child and passes one endpoint during spawn. Live, backfill, and pipeline receive no pipe.
-- The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. No other child sends or receives a message.
-- Pipe ownership supplies TUI identity. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges.
-- TUI pipe EOF reports peer loss. Process sentinels report every child's exit, including live, backfill, and pipeline, which have no pipe to lose. Command timeouts report unresponsive children.
-- Live, backfill, and pipeline stop through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
+- The Hub creates a duplex `multiprocessing.Pipe` for every child and passes one endpoint during spawn.
+- The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Live, backfill, and pipeline never send or receive a message on theirs.
+- Pipe ownership supplies service identity for every child. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges — only the TUI ever sends one.
+- Pipe EOF reports peer loss for every child. For live, backfill, and pipeline it is the only signal of Hub loss, checked with a non-blocking `poll()` once per work cycle. Process sentinels report every child's exit. Command timeouts report an unresponsive TUI.
+- Live, backfill, and pipeline stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
 - The Hub keeps request state in memory and discards it when the application session ends.
 - Only the Hub acquires `hub.lock` directly beneath the `platformdirs` runtime directory.
 - Process identity remains implicit in Hub-owned process handles and pipe endpoints.
@@ -30,7 +30,7 @@ Complete and review one numbered file step before beginning the next. Keep each 
 
 Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
-Current integration gap: Hub command dispatch and its in-memory request ledger remain unimplemented. Steps 4, 5, and 6 below predate the decision to drop pause/resume and remove the pipe from live, backfill, and pipeline; their checklists need reconciling with the new target above before those files are touched again. Step 8's pipe-per-child items need the same reconciling — only the TUI spawn path (step 9) still creates a pipe.
+Current integration gap: Hub command dispatch and its in-memory request ledger remain unimplemented. Steps 4, 5, and 6 below predate the decision to drop pause/resume and reduce live, backfill, and pipeline's pipe to EOF-only Hub-loss detection; their checklists need reconciling with the new target above before those files are touched again. Step 8's pipe items need the same reconciling — every child gets a pipe again, but only the TUI's ever carries a message.
 
 ## File sequence
 
@@ -60,11 +60,13 @@ Current integration gap: Hub command dispatch and its in-memory request ledger r
 
 ### 4. `src/spex/services/live.py`
 
-Reopened. This checklist predates dropping pause/resume and the pipe for this service — see the new target under "Resume here."
+Reopened. This checklist predates dropping pause/resume and reducing this service's pipe to EOF-only Hub-loss detection — see the new target under "Resume here."
 
-- [ ] Accept no pipe; construction no longer takes a pipe endpoint.
-- [ ] Rely on the shared `ServiceProcess` `SIGTERM` handler for graceful stop; drop control-message handling entirely.
+- [ ] Accept the child pipe endpoint through process construction, as before.
+- [ ] Never send or receive an application message on it; poll it once per work cycle and treat EOF as a stop signal.
+- [ ] Rely on the shared `ServiceProcess` `SIGTERM` handler for operator-initiated stop; drop control-message handling entirely.
 - [ ] Drop the `paused` half of the state contract; the service is only running or stopped.
+- [ ] Close the pipe during every exit path.
 - [ ] Align comments and docstrings with scaffold behavior.
 - [ ] Review the file before continuing.
 
@@ -74,6 +76,7 @@ Reopened, same basis as step 4.
 
 - [ ] Apply the reviewed live-service control structure to backfill.
 - [ ] Drop the `paused` half of the state contract; the service is only running or stopped.
+- [ ] Close the pipe during every exit path.
 - [ ] Align comments and docstrings with scaffold behavior.
 - [ ] Review the file before continuing.
 
@@ -81,9 +84,9 @@ Reopened, same basis as step 4.
 
 Reopened, same basis as step 4.
 
-- [ ] Extract the shared worker process and `SIGTERM`-based stop lifecycle into `src/spex/services/service.py`.
+- [ ] Extract the shared worker process and pipe/`SIGTERM` stop lifecycle into `src/spex/services/service.py`, with the pipe used only for EOF-based Hub-loss detection.
 - [x] Reduce live, backfill, and pipeline to concrete `ServiceProcess` subclasses.
-- [ ] Make the pipeline scaffold compatible with Hub-owned process supervision through the process sentinel alone; no pipe.
+- [ ] Make the pipeline scaffold compatible with Hub-owned process and pipe supervision.
 - [x] Preserve its validation-and-transformation responsibility.
 - [x] Add only the lifecycle behavior required by the walking skeleton.
 - [ ] Review the files before continuing.
@@ -99,10 +102,10 @@ Reopened, same basis as step 4.
 ### 8. `src/spex/services/hub.py`
 
 - [x] Retain the explicit `spawn` context, Hub lock, process registry, and cleanup ownership.
-- [ ] Create a pipe pair only when spawning the TUI child; live, backfill, and pipeline spawn without one.
-- [ ] Pass the TUI child its endpoint during spawn and close the unused copy; other children take no endpoint.
-- [ ] Store each parent endpoint (TUI only) or `None` with its role and process handle.
-- [ ] Monitor the TUI pipe endpoint and every child's process sentinel without listener or handler threads.
+- [ ] Create one pipe pair before spawning each child.
+- [ ] Pass the child endpoint during spawn and close unused endpoint copies.
+- [ ] Store each parent endpoint with its role and process handle.
+- [ ] Monitor every pipe endpoint and process sentinel without listener or handler threads. Only the TUI's pipe ever carries a message; live, backfill, and pipeline's are polled for EOF alone.
 - [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, retry-timer restart) until a real situation demonstrates the need. Duplicate-ID idempotency depends on that same deferred retry path, so it is deferred with it; UUID message IDs keep accidental collision out of scope regardless. Keep only synchronized ID allocation for now.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
