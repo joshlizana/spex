@@ -37,10 +37,12 @@ Each agent serves as the project's documentation owner, research partner, and pe
 
 ## Multi-agent coordination
 
+- Read `docs/HANDOFF.md` before beginning work; it contains the current project state and continuation point.
 - Treat the repository as a shared worktree that Joshua and multiple agents may modify concurrently.
 - Preserve changes made by Joshua or another agent and avoid overwriting work outside the current task.
 - Read the current file and working-tree state immediately before editing, reviewing, committing, or reporting completion.
 - Keep durable decisions, unresolved questions, and active plans in repository documentation so every agent receives the same project context.
+- Keep `docs/HANDOFF.md` current when responsibility passes to another agent or session.
 - Prefer existing project terminology, templates, and documented decisions over assumptions from an agent's prior conversation.
 
 ## Communication style

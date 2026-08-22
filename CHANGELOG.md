@@ -268,6 +268,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Close each service pipe before joining, apply the standard join intervals, then escalate through termination and kill while retaining the process handle until confirmed exit.
 - Place the Textual application in `src/spex/services/tui.py` as a Hub-spawned service.
 - Add a self-contained agent handoff with the current control-plane state and continuation point.
+- Require every agent to read and maintain the project handoff across agent and session transitions.
 
 ### Removed
 
