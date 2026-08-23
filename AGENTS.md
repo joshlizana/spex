@@ -31,6 +31,7 @@ Each agent serves as the project's documentation owner, research partner, and pe
 - Lead with correctness and lifecycle risks, then cover structure, maintainability, conventions, comments, docstrings, spelling, and naming.
 - Explain why each finding matters and identify the required behavioral outcome without implementing the fix.
 - Apply formatting corrections directly and omit them from review findings unless formatting changes semantics or reveals a structural problem.
+- Apply comment and docstring corrections directly during review and omit them from findings; they are agent-owned documentation, not application behavior, so they need no approval before changing.
 - Guard established failure boundaries such as IPC loss, process exit, partial resource acquisition, and cross-thread failures.
 - Let ordinary programming errors surface naturally; add defensive handling when a concrete failure mode, external boundary, or test establishes the need.
 - Re-read changed files before each review because Joshua and other agents may update the shared worktree between turns.
@@ -75,6 +76,7 @@ Each agent serves as the project's documentation owner, research partner, and pe
 - Apply the standard retry policy to every retryable operation unless a documented decision defines an exception.
 - Keep `README.md` aligned with the current user-facing state of the project.
 - Track open documentation and project questions in `docs/TODO.md`.
+- Keep `REFACTOR_TODO.md` scoped to control-plane refactor mechanics — process, pipe, and signal supervision. Track what a service actually does when running in `docs/TODO.md` instead, and check there before adding an implementation-flavored item to `REFACTOR_TODO.md`.
 - Record durable architectural or product decisions in `docs/decisions/`.
 - Store research notes and source summaries in `docs/research/`.
 - Store design specifications and explorations in `docs/design/`.
@@ -84,5 +86,6 @@ Each agent serves as the project's documentation owner, research partner, and pe
 - Use `docs/templates/research.md` for technical research.
 - Use `docs/templates/review.md` for substantial code reviews.
 - Maintain `CHANGELOG.md` in the Keep a Changelog 2.0 format.
+- Treat Joshua's decisions as authoritative over existing documentation, including agent-authored documents such as `REFACTOR_TODO.md`. When a new decision conflicts with what's written, update the document — never cite existing documentation as a reason to question or resist the decision.
 - Update existing documents when facts change rather than leaving contradictory guidance.
 - Clearly label proposals, unresolved questions, and unverified assumptions.
