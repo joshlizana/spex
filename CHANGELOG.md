@@ -37,6 +37,10 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 
 ### Changed
 
+- Reduce services to a signal-based stop and detect Hub loss by polling the child pipe between work cycles.
+- Give the TUI and dashboard their own spawned-process classes, since neither has a bounded work cycle to poll between.
+- Record shutdown requests in the Hub's signal handler and join services after the supervision loop exits.
+- Exit the TUI through its own interface and let the Hub read that child loss as its shutdown trigger.
 - Refactor the live-service scaffold to receive native control dictionaries through its Hub-created pipe and exit on pipe loss.
 - Apply the reviewed pipe-control lifecycle to the backfill-service scaffold.
 - Extract the shared worker lifecycle into `ServiceProcess` and reduce live, backfill, and pipeline to bounded-work subclasses.
@@ -272,5 +276,8 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 
 ### Removed
 
+- Remove `pause` and `resume` from the control plane, leaving a service either running or stopped.
+- Remove the worker receive thread, send lock, and correlated state envelopes that pause and resume required.
+- Remove the TUI bindings for service actions the control plane no longer provides.
 - Remove the address-based generic IPC client in favor of service-owned pipe handling.
 - Remove Typer and its transitive dependencies from the application runtime.
