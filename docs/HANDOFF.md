@@ -34,6 +34,8 @@ Hub review findings from this session, still open:
 
 Reopened this session — steps 4, 5, 6, and part of 8 in `REFACTOR_TODO.md`: `pause`/`resume` are dropped entirely; a service is only running or stopped. Operator-initiated stop moves from a pipe message to `process.terminate()` (`SIGTERM`), handled by a shared handler in `ServiceProcess` that ends the current work cycle gracefully. Live, backfill, and pipeline keep their pipe, but only to detect Hub loss — nothing is ever sent on it, a non-blocking `poll()` once per cycle is enough, no background thread needed. The TUI's pipe is the one carrying real two-way traffic, since it starts at launch rather than on operator command. See `REFACTOR_TODO.md`'s "Resume here" for the full target and the reopened per-file checklists.
 
+Considered and declined for now: pre-spawning every worker at Hub startup and gating actual work with `pause`/`resume` to keep them "hot," avoiding process-spawn latency on a TUI-issued `start`. `_spawn`/`_join_service`'s existing construct-and-start-together, join-and-discard-on-stop lifecycle stays. Revisit only if operator-perceived start latency proves noticeably slow in practice — not before.
+
 After step 8:
 
 1. Pass a child pipe to the Textual service.
