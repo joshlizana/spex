@@ -14,6 +14,8 @@ The orchestrator creates one duplex control pipe before spawning each child and 
 
 Live, backfill, and pipeline never exchange a message on their pipe. Its only purpose for these three is detecting Hub loss through EOF; the orchestrator otherwise tracks each as running or stopped from its own process registry and stops one directly with `process.terminate()`.
 
+The TUI and the dashboard are long-lived processes with no bounded work cycle — the TUI blocks inside Textual's own event loop, and the dashboard has no cycle either. Neither can poll its pipe between cycles the way the three workers do, so `SIGTERM`/`SIGINT` is their only stop mechanism, both for an operator-initiated stop and, incidentally, for `SIGINT` delivered by a shared process group (see Health and connection loss). The dashboard's pipe currently has no confirmed purpose beyond structural uniformity.
+
 ## Resource ownership
 
 Components keep resources local until initialization succeeds. A component that acquires several resources uses an `ExitStack` to clean up partial initialization and transfers that stack to the long-lived owner after successful setup. Shutdown releases owned resources in reverse acquisition order.
@@ -66,9 +68,9 @@ New orchestrator messages allocate a sequence. Responses and errors reuse their 
 
 ## Health and connection loss
 
-The Hub monitors every child's process sentinel and pipe endpoint. TUI pipe EOF triggers its graceful shutdown or marks it unavailable at the Hub. For live, backfill, and pipeline, pipe EOF means the Hub itself is gone — the Hub never closes a worker's pipe as a targeted stop signal the way it does for the TUI, since operator-initiated stop uses `SIGTERM` instead. Command timeouts identify an unresponsive TUI that remains alive. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
+The Hub monitors every child's process sentinel and pipe endpoint. For live, backfill, and pipeline, pipe EOF means the Hub itself is gone — the only signal of Hub loss they have. The TUI and dashboard do not poll their pipe for EOF at all; both are long-lived and non-cyclic, so `SIGTERM`/`SIGINT` is their stop mechanism instead, with a handler that commands the app to exit directly. Command timeouts identify an unresponsive TUI that remains alive. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
 
-Hub shutdown stops the TUI by closing its pipe before joining, so pipe EOF starts its graceful exit. It stops live, backfill, and pipeline directly with `SIGTERM`, which their shared `ServiceProcess` handler turns into a graceful exit; closing their pipes during the same shutdown gives them a second, redundant signal of the same thing. Every child then joins with the standard retry intervals, escalates to `terminate()` and a five-second wait if still alive, then kills and joins a process that still remains alive. It removes the process from its registry only after confirmed exit.
+Hub shutdown stops every child with `SIGTERM`/`process.terminate()` — the same call for live, backfill, pipeline, the TUI, and dashboard, though only the first three treat it as a flag checked between cycles; the TUI and dashboard act on it directly in the handler. Every child then gets a flat fifteen-second wait if still alive, then kills and joins a process that still remains alive. This is a confirmed, documented exception to the standard retry policy below (one flat wait, not four escalating ones) — not a drift from it. It removes the process from its registry only after confirmed exit.
 
 ## Command lifecycle
 
@@ -92,11 +94,11 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. Closing the old Hub's pipe endpoints causes every child, including live, backfill, and pipeline, to see EOF and follow its graceful shutdown path — the same detection each of them already uses for an unexpected Hub failure. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
+A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. That termination reaches only the old Hub's specific PID, not its children — POSIX does not propagate a killed parent's signal to them. Closing the old Hub's pipe endpoints as it dies causes live, backfill, and pipeline to see EOF and follow their graceful shutdown path. The TUI and dashboard have no equivalent: they are orphaned unless the replacement (or whatever killed the old Hub) also reaches their process group, which a plain PID-targeted kill does not. Accepted for now — the realistic path to a PID-targeted kill is Ctrl-C (which reaches the whole process group, TUI and dashboard included) already having failed, at which point that failure is the bug to fix. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
 
 ## Application shutdown
 
-Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops live, backfill, and pipeline with `SIGTERM` and stops the TUI by closing its pipe, joins every child, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure triggers every child's shutdown through pipe loss — the TUI through its protocol-driven graceful-exit path, and live, backfill, and pipeline through the same EOF detection that also covers Hub replacement.
+Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every child — live, backfill, pipeline, the TUI, and dashboard — with `SIGTERM`, joins each, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure is visible to live, backfill, and pipeline through pipe EOF. The TUI and dashboard have no automatic detection of it at all, the same gap described under Replacement and orphan cleanup.
 
 ## Standard retry policy
 
