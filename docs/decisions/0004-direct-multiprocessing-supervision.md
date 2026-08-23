@@ -17,7 +17,7 @@ Spex needs to supervise five named child processes with role-specific state, IPC
 ## Considered options
 
 - Direct `multiprocessing.Process` supervision.
-- `asyncio` subprocess supervision.
+- `asyncio` subprocess supervision (`asyncio.create_subprocess_exec`), rejected as the process-creation mechanism. This does not exclude an `asyncio` event loop as the Hub's supervision mechanism over `multiprocessing`-created children, which is what the Hub uses.
 - `concurrent.futures.ProcessPoolExecutor`.
 - Joblib with Loky.
 - Pebble process pools.
@@ -32,7 +32,7 @@ The Hub creates every child and supplies its duplex pipe endpoint during `spawn`
 ### Consequences
 
 - The main-process orchestrator creates every child with `multiprocessing.Process` and retains its process handle.
-- The orchestrator creates the listener before spawning Textual and owns connection monitoring independently of Textual's event loop.
+- The orchestrator owns child monitoring independently of Textual's event loop, through pipe endpoints and process sentinels it holds directly.
 - Textual's main thread remains the exclusive owner of UI state and widget updates.
 - Textual connection handling returns state changes through `post_message()` or `call_from_thread()`.
 - Worker targets remain importable and receive serializable startup arguments.
