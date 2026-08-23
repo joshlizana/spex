@@ -38,6 +38,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 ### Changed
 
 - Reduce services to a signal-based stop and detect Hub loss by polling the child pipe between work cycles.
+- Supervise child processes from an `asyncio` loop in the Hub, joining every child concurrently off the event loop.
 - Give the TUI and dashboard their own spawned-process classes, since neither has a bounded work cycle to poll between.
 - Record shutdown requests in the Hub's signal handler and join services after the supervision loop exits.
 - Exit the TUI through its own interface and let the Hub read that child loss as its shutdown trigger.

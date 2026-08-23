@@ -6,7 +6,7 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 ## Resume here
 
-Steps 1 through 7 are complete and stand. Step 8 is partly done; step 9 is partly done — see each section below.
+Steps 1 through 8 are complete and stand. Step 9 is partly done — see each section below.
 
 Target for live, backfill, and pipeline, now implemented: drop `pause`/`resume` entirely, a service is only running or stopped. `start` stays spawn-only. Operator-initiated `stop` moves to `process.terminate()` (`SIGTERM`) — `ServiceProcess` installs a shared handler so the current work cycle ends gracefully; each subclass still only differs in its unit of work per cycle. Each of the three still receives a Hub-owned pipe, but only to detect Hub loss: nothing is ever sent on it, and a non-blocking `poll()` once per work cycle (no background thread) is enough to notice EOF and stop the same way `SIGTERM` does.
 
@@ -14,7 +14,7 @@ TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic 
 
 Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
 
-Continue 8e with the real supervision loop (the confirmed `asyncio` rewrite), the last unchecked item in that step. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed. The Hub review is complete, so step 9's TUI integration follows directly.
+Continue at 9b, wiring the TUI's child pipe endpoint functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing passes it to the `Spex` app or reads it. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
 
 ## Confirmed target
 
@@ -38,7 +38,7 @@ Complete and review one numbered file step before beginning the next. Keep each 
 
 Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
-Current integration gap: Hub's supervision loop remains unimplemented — `run()` is a stub pending the confirmed `asyncio` rewrite. `_handle_message` exists and dispatches `start`/`stop`, but nothing calls it yet. No ledger gap — none is needed.
+Current integration gap: the TUI's pipe carries no traffic — the Hub's supervision loop reads it, but the TUI never sends. Step 9b closes the transport half; what the TUI sends is implementation, tracked in `docs/TODO.md` 0.2. The `spex` entry point still runs `Spex` directly rather than bootstrapping the Hub, which step 10 closes. No ledger gap — none is needed.
 
 ## File sequence
 
@@ -117,7 +117,7 @@ Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()`
 - [x] b. Create one pipe pair before spawning each child.
 - [x] c. Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] d. Store each parent endpoint with its role and process handle.
-- [ ] e. Monitor every pipe endpoint and process sentinel without listener or handler threads. `run()` is currently a stub that spawns the TUI, registers signal handlers, then sleeps until `self._running` clears and joins — no monitoring happens yet. This is the pending async rewrite.
+- [x] e. Monitor every pipe endpoint and process sentinel without listener or handler threads. `run()` is an `asyncio` supervision loop: `loop.add_signal_handler` records shutdown intent, the TUI's pipe drives `_handle_message`, TUI loss ends the loop through pipe EOF or the process sentinel, and worker loss is joined without stopping the Hub. Blocking joins run through `asyncio.to_thread`, and `_join` escalates every child concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`).
 - [x] f. No request ledger needed — the walking skeleton only sends one-off, fire-and-forget commands. `_handle_message` dispatches `start`/`stop` straight to `_spawn_service`/`_join_service` with no response and no `message_id` in use anywhere; nothing to track. Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 - [x] g. Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] h. Preserve graceful join and forced-termination ownership.

@@ -1,5 +1,5 @@
+import asyncio
 import signal
-import time
 
 from dataclasses import dataclass
 from multiprocessing import connection, context, get_context
@@ -28,8 +28,6 @@ class ManagedService:
 
     process: ServiceProcess | SpexProcess | DashboardService
     pipe: connection.Connection
-    is_running: bool = True
-    is_paused: bool = False
 
 
 class Hub:
@@ -41,37 +39,65 @@ class Hub:
         self._spawn_context: context.SpawnContext = get_context("spawn")
         self._services: dict[str, ManagedService] = {}
 
-    def __enter__(self):
+    async def __aenter__(self):
         self._lock = HubLock()
         self._lock.acquire()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        try:
-            self._join()
-        finally:
-            if self._lock is not None:
-                self._lock.release()
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        if self._services:
+            await self._join()
+        if self._lock is not None:
+            self._lock.release()
 
-    def run(self):
+    async def run(self):
         """Run the Spex Hub supervision loop."""
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(
+            signal.SIGTERM,
+            self._signal_handler,
+            signal.SIGTERM,
+        )
+        loop.add_signal_handler(
+            signal.SIGINT,
+            self._signal_handler,
+            signal.SIGINT,
+        )
 
+        # Start the TUI first; it is the primary operator interface, and its exit
+        # is the Hub's shutdown trigger.
         self._spawn_service("tui")
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
 
+        # Supervise the running services, handling messages received from the TUI.
         while self._running:
-            # Wait for messages from tui
-            time.sleep(0.1)
-        self._join()
+            for role, service in list(self._services.items()):
+                if role == "tui":
+                    try:
+                        if service.pipe.poll() and service.process.is_alive():
+                            message = service.pipe.recv()
+                            await self._handle_message(message)
+                        if not service.process.is_alive():
+                            self._running = False
+                            continue
+                    except (EOFError, OSError):
+                        self._running = False
+                        continue
+                else:
+                    if not service.process.is_alive():
+                        await asyncio.to_thread(self._join_service, role)
+                        continue
 
-    def _signal_handler(self, signum, frame):
+            await asyncio.sleep(0.1)
+
+        await self._join()
+
+    def _signal_handler(self, signum):
         """Handle signals sent to the Hub process."""
         if signum in (signal.SIGTERM, signal.SIGINT):
             # Record the request; run() tears the services down after the loop.
             self._running = False
 
-    def _handle_message(self, message: dict):
+    async def _handle_message(self, message: dict):
         """Handle a message received from a specific service."""
 
         match message.get("type"):
@@ -80,11 +106,9 @@ class Hub:
                 self._spawn_service(service)
             case "stop":
                 service = message.get("role")
-                self._join_service(service)
+                await asyncio.to_thread(self._join_service, service)
             case _:
-                raise ValueError(
-                    f"{message.get('type')}"
-                )
+                raise ValueError(f"{message.get('type')}")
 
     def _spawn_service(self, role: str):
         """Spawn a new instance of a Spex service."""
@@ -130,7 +154,9 @@ class Hub:
 
             del self._services[role]
 
-    def _join(self):
+    async def _join(self):
         """Join all child processes."""
-        for role in list(self._services.keys()):
-            self._join_service(role)
+        roles = list(self._services)
+        await asyncio.gather(
+            *(asyncio.to_thread(self._join_service, role) for role in roles)
+        )

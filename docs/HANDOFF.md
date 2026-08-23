@@ -6,7 +6,7 @@ This document provides the current working context for the next agent. [`AGENTS.
 
 ## Current objective
 
-Complete the thin walking-skeleton control plane before implementing Jetstream or data-pipeline behavior. Continue step 8 in `REFACTOR_TODO.md`, then proceed through the TUI and entry-point integration.
+Complete the thin walking-skeleton control plane before implementing Jetstream or data-pipeline behavior. Continue at step 9 in `REFACTOR_TODO.md`, then proceed through the entry-point integration.
 
 ## Implemented structure
 
@@ -18,22 +18,24 @@ Complete the thin walking-skeleton control plane before implementing Jetstream o
 - Every child receives a Hub-created duplex `multiprocessing.Pipe`. Only the TUI's is meant to carry messages, and that traffic isn't wired up yet (step 9). Live, backfill, and pipeline poll theirs once per work cycle purely to detect Hub loss through EOF; the TUI and dashboard don't poll their pipe at all.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
 - `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy — confirmed working for all five roles (`live`, `backfill`, `pipeline`, `tui`, `dashboard`).
-- The Hub's actual supervision loop (`run()`) is still a stub — it spawns the TUI, registers signal handlers, then sleeps until `self._running` clears, and joins. Nothing monitors pipes or sentinels yet, and `_handle_message` (which dispatches `start`/`stop`) has no caller. This is the pending `asyncio` rewrite.
+- The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass branches on role: the TUI's pipe is polled and received, driving `_handle_message`; workers are checked by process sentinel only. TUI loss ends the loop through pipe EOF or a dead sentinel; worker loss is joined and dropped without stopping the Hub. Every blocking join runs through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`), so `__aexit__` awaits `_join` before releasing the lock.
 - Live, backfill, and pipeline stop gracefully through `SIGTERM`/`SIGINT`, checked as a flag between cycles. The TUI exits normally through its own interface instead, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `app.exit()` covers only the abnormal path and is tracked in `docs/TODO.md` 0.2, not this refactor. Dashboard needs no handler at all; termination without one is acceptable.
 - `_join_service` closes the pipe, then `terminate()` and a fifteen-second wait if still alive, then `kill()`.
 
 ## Resume point
 
-Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with the real supervision loop — the confirmed `asyncio` rewrite. It is 8e, the last unchecked item in that step, and the Hub review is complete, so step 9's TUI integration follows directly. `REFACTOR_TODO.md` items are referenced by step number and letter. No request ledger is needed: commands are one-off and fire-and-forget for the walking skeleton, and `_handle_message` already reflects that (dispatches `start`/`stop` directly, no response, no `message_id`). Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
+Continue [`src/spex/services/tui.py`](../src/spex/services/tui.py) at 9b: pass the TUI's child pipe endpoint through to the `Spex` app and wire it functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing hands it to the app or reads it. Step 8 is closed, including the Hub's `asyncio` supervision loop and its review. `REFACTOR_TODO.md` items are referenced by step number and letter. No request ledger is needed: commands are one-off and fire-and-forget for the walking skeleton, and `_handle_message` already reflects that (dispatches `start`/`stop` directly, no response, no `message_id`). Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 
-Hub review findings:
+Hub review findings, all resolved this session except (1):
 
-1. An unmatched message type still raises inside `_handle_message` (`case _: raise ValueError(...)`), carrying only the message type and no sender. Intentional: failures surface loudly rather than degrade, and the TUI is the only sender in the skeleton. Revisit when more children send messages.
-2. `_join_service`'s terminate/kill escalation runs synchronously — once the real supervision loop exists, a slow-exiting child stalls supervision of every other service for the length of its escalation. Still open. The async rewrite must actually solve this with a task per escalation, not just replace the polling mechanism.
-3. Async rewrite of `run()` — confirmed, not yet built. `run()` is `while self._running: time.sleep(0.1)` followed by `self._join()`. Open questions: task-exception visibility (asyncio silently drops exceptions from unreferenced tasks, which conflicts with (1)'s fail-fast stance) and the `__enter__`/`__exit__` shutdown lifecycle around an async `run()`. The real loop should use `loop.add_signal_handler()`; note that its callback runs on the event loop and cannot await, so teardown must stay outside it.
-4. Resolved this session: the Hub's signal handler now only records the request by clearing `self._running`, and `run()` joins services after the loop exits. Teardown had been running inside the handler, where it blocks the main thread for each child's full escalation, can interrupt `_spawn_service` between `process.start()` and registry insertion (orphaning a live child), and cannot become a task under asyncio. Both handlers now follow the same rule: record intent, act on the main path.
+1. An unmatched message type raises inside `_handle_message` (`case _: raise ValueError(...)`), carrying only the message type and no sender. Intentional: failures surface loudly rather than degrade, and the TUI is the only sender in the skeleton. Revisit when more children send messages.
+2. Resolved: `_join_service`'s blocking terminate/kill escalation no longer stalls supervision. `_join` runs every child's escalation through `asyncio.to_thread` under one `asyncio.gather`, so the five overlap, and `_handle_message`'s `stop` path threads its join the same way. The inline joins in the supervision loop act only on children whose sentinel already reports exit, so they return immediately.
+3. Resolved: `run()` is the `asyncio` supervision loop. `loop.add_signal_handler` receives a plain method that only clears `self._running`, so no task is created and teardown stays on the main path after the loop exits. The lifecycle question settled on `__aenter__`/`__aexit__` — one event loop for the Hub's whole lifetime, with `__aexit__` awaiting `_join` before releasing the lock.
+4. Resolved: the Hub's signal handler only records the request by clearing `self._running`, and `run()` joins services after the loop exits. Teardown had been running inside the handler, where it blocks the main thread for each child's full escalation, can interrupt `_spawn_service` between `process.start()` and registry insertion (orphaning a live child), and cannot become a task under asyncio. Both handlers follow the same rule: record intent, act on the main path.
 
-Steps 1 through 7 in `REFACTOR_TODO.md` are complete. `pause`/`resume` are dropped entirely — a service is only running or stopped; operator-initiated stop is `process.terminate()` (`SIGTERM`) handled by the shared `ServiceProcess` handler; live, backfill, and pipeline keep their pipe only to detect Hub loss. Step 7 closed on the decision that the dashboard's pipe carries loss detection in both directions and no application messages.
+Known and accepted in the Hub, not defects: `_spawn_service`'s `process.start()` blocks the loop for the duration of a `spawn` interpreter launch. `_join_service` is also not re-entrant — two concurrent calls for the same role would both pass the registry lookup and the second `del` would raise `KeyError`. Unreachable today, because `run()` is the only task on the loop and is suspended at the `await` while a threaded join runs. Revisit when step 9 introduces additional tasks.
+
+Steps 1 through 8 in `REFACTOR_TODO.md` are complete. `pause`/`resume` are dropped entirely — a service is only running or stopped; operator-initiated stop is `process.terminate()` (`SIGTERM`) handled by the shared `ServiceProcess` handler; live, backfill, and pipeline keep their pipe only to detect Hub loss. Step 7 closed on the decision that the dashboard's pipe carries loss detection in both directions and no application messages.
 
 Verified by test and worth remembering: `Connection.poll()` reports readability, not EOF specifically — it returns `True` for a waiting message exactly as it does for a closed peer. `ServiceProcess`'s bare `poll()` is therefore sound only while nothing is ever sent to those children. Any step that starts sending to live, backfill, or pipeline must replace it with a `recv()` treating `EOFError` as Hub loss and anything else as a message.
 
@@ -52,10 +54,9 @@ Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only 
 
 Remaining refactor sequence:
 
-1. Build the Hub's `asyncio` supervision loop (8e).
-2. Pass a child pipe to the Textual service and wire it functionally (9b).
-3. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
-4. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
+1. Pass a child pipe to the Textual service and wire it functionally (9b), then review it (9c).
+2. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
+3. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
 
 ## Confirmed boundaries
 
