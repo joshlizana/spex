@@ -64,7 +64,7 @@ After step 8:
 - Source compilation succeeds with `python -m compileall -q src/spex`.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
 - Behavioral multiprocessing, IPC, shutdown, and Textual integration tests remain pending.
-- The worktree is clean at the start of this handoff update.
+- The service, TUI, dashboard, and Hub changes described above are committed; the worktree is clean.
 
 ## Primary references
 
