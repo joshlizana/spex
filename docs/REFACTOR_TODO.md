@@ -125,11 +125,9 @@ Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()`
 
 - [x] Keep the Textual application in the service package as a Hub-spawned child — `SpexProcess(SpawnProcess)` wraps `Spex` and is spawnable via `_spawn_service`.
 - [ ] Accept the TUI child pipe endpoint. `SpexProcess.__init__` takes `pipe` structurally, but it is never passed to the `Spex` app itself and nothing reads or writes it — not functionally wired yet.
-- [ ] Send operator intents as native dictionaries.
-- [ ] Receive state through a background worker and cross Textual's thread-safe message boundary.
-- [ ] Replace placeholder health behavior only when real Hub state is available.
-- [ ] Preserve terminal ownership, bindings, and application-shutdown intent. Normal shutdown runs through the TUI interface, with the Hub reading the resulting child loss; the abnormal-path `SIGTERM` handler is tracked in `docs/TODO.md` 0.2.
 - [ ] Review the file before continuing.
+
+What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.2: sending operator intents, receiving state across Textual's thread-safe boundary, showing real child and connection state in place of the placeholder health indicator, and treating Textual closure as an application-shutdown request. The abnormal-path `SIGTERM` handler is tracked there too. This step covers only the transport wiring.
 
 ### 10. `src/spex/__init__.py`
 
@@ -149,10 +147,11 @@ Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()`
 
 ### 12. Integration checkpoint
 
+These confirm the transport swap itself. Message traffic on the TUI's pipe is a feature, verified under `docs/TODO.md` 0.2.
+
 - [ ] Confirm every source module imports successfully.
 - [ ] Confirm the Hub acquires the single runtime lock.
 - [ ] Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe.
-- [ ] Confirm native dictionary messages travel in both directions on the TUI's pipe.
-- [ ] Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for live, backfill, and pipeline, and through `SIGTERM`/`SIGINT` propagation for TUI and dashboard.
+- [ ] Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for live, backfill, pipeline, and dashboard.
 - [ ] Confirm application shutdown closes endpoints and joins every child.
 - [ ] Reconcile completed work with `docs/TODO.md`, design documents, and `CHANGELOG.md`.
