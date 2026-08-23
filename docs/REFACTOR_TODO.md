@@ -96,11 +96,9 @@ Complete, same basis as step 4.
 
 ### 7. `src/spex/services/dashboard.py`
 
-Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts a pipe — a reversal of this step's original "no control-pipe behavior" target, since dashboard is grouped with the TUI now (long-lived, non-cyclic, stopped by `SIGTERM`/`SIGINT`) rather than with the EOF-polling workers. The pipe's purpose beyond that is not yet decided.
+Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts a pipe — a reversal of this step's original "no control-pipe behavior" target. No signal handling needed: dashboard is read-only display with no in-flight state, so an unhandled `SIGTERM`/`SIGINT`/immediate exit is acceptable, and its underlying framework may already handle signals on its own. Its actual scaffold behavior (`run()`'s real body) is `docs/TODO.md` 0.7 territory, not refactor scope — this checklist only covers whether it fits the Hub's process/pipe supervision model.
 
 - [x] Subclass a spawnable `multiprocessing.Process` and accept the child pipe endpoint through construction.
-- [ ] Install a `SIGTERM`/`SIGINT` handler that directly ends the dashboard (same shape as `SpexProcess`, not the workers' poll-and-flag pattern — there is no work cycle to poll between).
-- [ ] Replace the `run()` stub (`pass`) with the dashboard's actual scaffold behavior.
 - [ ] Decide and document what the pipe is for here, if anything beyond structural uniformity.
 - [ ] Close the pipe during every exit path.
 - [ ] Align comments and docstrings with scaffold behavior.
