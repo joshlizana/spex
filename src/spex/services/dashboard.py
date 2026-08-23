@@ -17,6 +17,7 @@ class DashboardService(SpawnProcess):
         """Run dashboard work, releasing the Hub pipe on exit."""
         try:
             # Run dashboard work.
-            pass
+            while True:
+                time.sleep(0.1)
         finally:
             self._pipe.close()

@@ -31,6 +31,7 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [ ] Spawn Textual as a non-daemonic IPC spoke with inherited terminal streams.
 - [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
+- [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Define the walking-skeleton service transitions.
 - [ ] Add Textual controls for starting and stopping live ingestion and backfill.
 - [ ] Start validation and transformation automatically with either ingestion service.

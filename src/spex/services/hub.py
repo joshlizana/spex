@@ -1,15 +1,16 @@
 import signal
+import time
 
 from dataclasses import dataclass
 from multiprocessing import connection, context, get_context
 
 from spex.services.backfill import BackfillService
-from spex.services.lock import HubLock
+from spex.services.dashboard import DashboardService
 from spex.services.live import LiveService
+from spex.services.lock import HubLock
 from spex.services.pipeline import PipelineService
 from spex.services.service import ServiceProcess
 from spex.services.tui import SpexProcess
-from spex.services.dashboard import DashboardService
 
 
 SERVICE_TYPES = {
@@ -35,6 +36,7 @@ class Hub:
     """Represent the main-process Spex Hub scaffold."""
 
     def __init__(self):
+        self._running: bool = True
         self._lock: HubLock | None = None
         self._spawn_context: context.SpawnContext = get_context("spawn")
         self._services: dict[str, ManagedService] = {}
@@ -58,22 +60,16 @@ class Hub:
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
 
-        while True:
-            try:
-                # Wait for messages from tui
-                pass
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                raise
-
+        while self._running:
+            # Wait for messages from tui
+            time.sleep(0.1)
         self._join()
-
 
     def _signal_handler(self, signum, frame):
         """Handle signals sent to the Hub process."""
         if signum in (signal.SIGTERM, signal.SIGINT):
-            self._join()
+            # Record the request; run() tears the services down after the loop.
+            self._running = False
 
     def _handle_message(self, message: dict):
         """Handle a message received from a specific service."""

@@ -68,10 +68,6 @@ class Spex(App):
 
     BINDINGS = [
         ("q", "quit", "Quit"),
-        ("l", "start_live_service", "Start Live Service"),
-        ("b", "start_backfill_service", "Start Backfill Service"),
-        ("p", "pause_service", "Pause Service"),
-        ("r", "resume_service", "Resume Service"),
     ]
 
     def compose(self) -> ComposeResult:
