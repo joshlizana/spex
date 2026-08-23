@@ -36,6 +36,8 @@ Reopened this session — steps 4, 5, 6, and part of 8 in `REFACTOR_TODO.md`: `p
 
 Considered and declined for now: pre-spawning every worker at Hub startup and gating actual work with `pause`/`resume` to keep them "hot," avoiding process-spawn latency on a TUI-issued `start`. `_spawn`/`_join_service`'s existing construct-and-start-together, join-and-discard-on-stop lifecycle stays. Revisit only if operator-perceived start latency proves noticeably slow in practice — not before.
 
+TUI and dashboard are long-lived, non-cyclic processes (`SpexProcess` blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so they don't use the workers' pipe-EOF-poll pattern for Hub loss. They're expected to be ended by `SIGTERM`/`SIGINT` instead — the handler must directly command the app to exit (e.g. `app.exit()` for Textual), not set a flag polled between cycles, since there's no loop to poll from. Accepted gap: a kill targeting the Hub's specific PID (not its process group) orphans them with no signal ever arriving, since POSIX doesn't propagate a killed parent's signal to its children. Declined as out of scope — the only realistic path to a PID-targeted kill is Ctrl-C (which does reach them, sharing the Hub's process group) already having failed, at which point that failure is the bug to fix, not the orphan left behind.
+
 After step 8:
 
 1. Pass a child pipe to the Textual service.
