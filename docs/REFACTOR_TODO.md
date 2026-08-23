@@ -6,13 +6,15 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 ## Resume here
 
-Steps 1 through 6 are complete and stand. Step 7 is reopened; step 8 is partly done; step 9 is partly done — see each section below.
+Steps 1 through 7 are complete and stand. Step 8 is partly done; step 9 is partly done — see each section below.
 
 Target for live, backfill, and pipeline, now implemented: drop `pause`/`resume` entirely, a service is only running or stopped. `start` stays spawn-only. Operator-initiated `stop` moves to `process.terminate()` (`SIGTERM`) — `ServiceProcess` installs a shared handler so the current work cycle ends gracefully; each subclass still only differs in its unit of work per cycle. Each of the three still receives a Hub-owned pipe, but only to detect Hub loss: nothing is ever sent on it, and a non-blocking `poll()` once per work cycle (no background thread) is enough to notice EOF and stop the same way `SIGTERM` does.
 
-TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. Both are stopped by `SIGTERM`/`SIGINT` instead, with a handler that directly commands the app to exit rather than setting a flag. The TUI is still the one genuine two-way exception for messaging — it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic once step 9 finishes — but its *shutdown* mechanism is signal-based like everything else now, not pipe-EOF-based.
+TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `Spex.exit()` covers only the abnormal path — an external kill of the Hub or a supervisor exception, where `_join()` would otherwise terminate the TUI unhandled and leave the terminal in raw mode — and is tracked in `docs/TODO.md` 0.2 as implementation rather than refactor scope. The TUI is still the one genuine two-way exception for messaging: it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic once step 9 finishes.
 
-Continue step 8 with the real supervision loop (the confirmed `asyncio` rewrite). No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed. Complete the remaining Hub review before starting the TUI integration in step 9.
+Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
+
+Continue step 8 with the real supervision loop (the confirmed `asyncio` rewrite), the last unchecked item in that step. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed. The Hub review is complete, so step 9's TUI integration follows directly.
 
 ## Confirmed target
 
@@ -20,9 +22,10 @@ Continue step 8 with the real supervision loop (the confirmed `asyncio` rewrite)
 - The Hub creates a duplex `multiprocessing.Pipe` for every child and passes one endpoint during spawn.
 - The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Live, backfill, pipeline, and dashboard never send or receive a message on theirs.
 - Pipe ownership supplies service identity for every child. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges — only the TUI ever sends one.
-- Pipe EOF is the only signal of Hub loss for live, backfill, and pipeline, checked with a non-blocking `poll()` once per work cycle. It plays no role in stopping the TUI or dashboard — see below. Process sentinels report every child's exit regardless.
+- Pipe EOF is the only signal of Hub loss for live, backfill, and pipeline, checked with a non-blocking `poll()` once per work cycle. It also serves the dashboard. It plays no role in stopping the TUI, which exits through its interface. Process sentinels report every child's exit regardless.
+- `poll()` reports readability, not EOF specifically: it returns `True` for a waiting message just as it does for a closed peer, verified by test. This is sound only while nothing is ever sent to these children. Any step that starts sending to live, backfill, or pipeline must replace the bare `poll()` with a `recv()` that treats `EOFError` as Hub loss and anything else as a message.
 - Live, backfill, and pipeline stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
-- The TUI and dashboard stop through `SIGTERM`/`SIGINT`, since neither has a work cycle to poll a flag between — the handler commands the app to exit directly rather than setting a flag.
+- The TUI stops by exiting through its own interface; the Hub detects that child loss and shuts down. The dashboard stops through `SIGTERM`/`SIGINT` without a handler, since it holds no in-flight state.
 - No request state is kept — commands are one-off and fire-and-forget, nothing to track or discard.
 - Only the Hub acquires `hub.lock` directly beneath the `platformdirs` runtime directory.
 - Process identity remains implicit in Hub-owned process handles and pipe endpoints.
@@ -96,13 +99,15 @@ Complete, same basis as step 4.
 
 ### 7. `src/spex/services/dashboard.py`
 
-Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts a pipe — a reversal of this step's original "no control-pipe behavior" target. No signal handling needed: dashboard is read-only display with no in-flight state, so an unhandled `SIGTERM`/`SIGINT`/immediate exit is acceptable, and its underlying framework may already handle signals on its own. Its actual scaffold behavior (`run()`'s real body) is `docs/TODO.md` 0.7 territory, not refactor scope — this checklist only covers whether it fits the Hub's process/pipe supervision model.
+Complete. `DashboardService` now subclasses `SpawnProcess` directly and accepts a pipe — a reversal of this step's original "no control-pipe behavior" target. No signal handling needed: dashboard is read-only display with no in-flight state, so an unhandled `SIGTERM`/`SIGINT`/immediate exit is acceptable, and its underlying framework may already handle signals on its own. Its actual scaffold behavior (`run()`'s real body) is `docs/TODO.md` 0.7 territory, not refactor scope — this checklist only covers whether it fits the Hub's process/pipe supervision model.
 
 - [x] Subclass a spawnable `multiprocessing.Process` and accept the child pipe endpoint through construction.
-- [ ] Decide and document what the pipe is for here, if anything beyond structural uniformity.
-- [ ] Close the pipe during every exit path.
-- [ ] Align comments and docstrings with scaffold behavior.
-- [ ] Review the file before continuing.
+- [x] The pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages.
+- [x] Close the pipe during every exit path.
+- [x] Align comments and docstrings with scaffold behavior.
+- [x] Review the file before continuing.
+
+Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()` currently blocks in a placeholder sleep loop and never reads the pipe, so Hub loss is not yet detected. The real dashboard body has to consult the pipe for EOF.
 
 ### 8. `src/spex/services/hub.py`
 
@@ -114,7 +119,7 @@ Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [x] No request ledger needed — the walking skeleton only sends one-off, fire-and-forget commands. `_handle_message` dispatches `start`/`stop` straight to `_spawn_service`/`_join_service` with no response and no `message_id` in use anywhere; nothing to track. Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
-- [ ] Review the file before continuing. `SERVICE_TYPES`/`ManagedService` including `tui` and `dashboard` is intentional — `_spawn_service` is the uniform spawn path for all five roles.
+- [x] Review the file before continuing. `SERVICE_TYPES`/`ManagedService` including `tui` and `dashboard` is intentional — `_spawn_service` is the uniform spawn path for all five roles.
 
 ### 9. `src/spex/services/tui.py`
 
@@ -123,7 +128,7 @@ Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [ ] Send operator intents as native dictionaries.
 - [ ] Receive state through a background worker and cross Textual's thread-safe message boundary.
 - [ ] Replace placeholder health behavior only when real Hub state is available.
-- [ ] Preserve terminal ownership, bindings, and application-shutdown intent. Shutdown itself is no longer pipe-EOF-driven — `SpexProcess` needs a `SIGTERM`/`SIGINT` handler that calls `Spex.exit()` directly, the same shape as dashboard, since `app.run()` blocks with no cycle to poll from.
+- [ ] Preserve terminal ownership, bindings, and application-shutdown intent. Normal shutdown runs through the TUI interface, with the Hub reading the resulting child loss; the abnormal-path `SIGTERM` handler is tracked in `docs/TODO.md` 0.2.
 - [ ] Review the file before continuing.
 
 ### 10. `src/spex/__init__.py`
@@ -138,9 +143,9 @@ Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 
 - [x] Delete the obsolete `src/spex/services/hub/ipc_listener.py` module with the nested Hub package.
 - [x] Delete the obsolete generic client artifact.
-- [ ] Remove `orjson` from control-plane imports while preserving any separate data-pipeline use.
-- [ ] Confirm no code references listener addresses, authentication keys, hello messages, heartbeats, or runtime IPC paths.
-- [ ] Review the removal before continuing.
+- [x] Confirm `orjson` is absent from control-plane transport. Its only use is `src/spex/services/lock.py`, writing lock metadata, which is not transport.
+- [x] Confirm no code references listener addresses, authentication keys, hello messages, heartbeats, or runtime IPC paths.
+- [x] Review the removal before continuing.
 
 ### 12. Integration checkpoint
 

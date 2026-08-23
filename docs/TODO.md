@@ -81,6 +81,7 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 #### 0.7 Complete the analytical view
 
 - [ ] Launch Streamlit as a supervised child process.
+- [ ] Detect Hub loss in the dashboard through pipe EOF, replacing the placeholder loop that never reads its pipe.
 - [ ] Open DuckLake through a read-only dashboard boundary.
 - [ ] Display the posts table.
 - [ ] Display post counts grouped by DID.
