@@ -24,7 +24,7 @@ Complete the thin walking-skeleton control plane before implementing Jetstream o
 
 ## Resume point
 
-Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with the real supervision loop — the confirmed `asyncio` rewrite. It is the last unchecked item in step 8, and the Hub review is complete, so step 9's TUI integration follows directly. No request ledger is needed: commands are one-off and fire-and-forget for the walking skeleton, and `_handle_message` already reflects that (dispatches `start`/`stop` directly, no response, no `message_id`). Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
+Continue [`src/spex/services/hub.py`](../src/spex/services/hub.py) with the real supervision loop — the confirmed `asyncio` rewrite. It is 8e, the last unchecked item in that step, and the Hub review is complete, so step 9's TUI integration follows directly. `REFACTOR_TODO.md` items are referenced by step number and letter. No request ledger is needed: commands are one-off and fire-and-forget for the walking skeleton, and `_handle_message` already reflects that (dispatches `start`/`stop` directly, no response, no `message_id`). Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 
 Hub review findings:
 
@@ -48,12 +48,12 @@ Two open design threads, discussed but not decided:
 1. A background thread blocked on `self._pipe.recv()` for TUI (and dashboard) would detect Hub loss without depending on any signal reaching the process — it fires on the OS closing the pipe regardless of cause, which also closes the abnormal-path and PID-targeted-kill gaps above. For the TUI this is not extra cost: it is the same background-worker thread step 9 already needs for real operator-intent/state traffic, so EOF detection comes free from the same `recv()` call. Textual requires crossing back to the main thread via `call_from_thread()`/`post_message()` to act on it, not calling `app.exit()` from that thread.
 2. Once live/backfill/pipeline get real two-way messages, message handling likely needs its own thread there too: inline handling only checks the pipe between `_run_cycle()` calls, so a slow cycle delays response to anything arriving mid-cycle. This is close to `ServiceProcess`'s earlier shape (`_receive_thread` + `_send_lock`), removed only because there was nothing to receive yet. Bringing real messaging back likely means bringing at least the send lock back, since concurrent `.send()` calls on one `Connection` need serializing.
 
-Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only — process, pipe, and signal supervision. What a service does with its pipe is implementation and lives in `docs/TODO.md`. Step 9 is now the TUI transport wiring and its review; its operator intents, background-worker state receipt, real health indicator, and Textual-closure shutdown intent moved out, since `docs/TODO.md` 0.2 already covers all four. Step 12 keeps the mechanical confirmations and drops the bidirectional-message check as feature verification.
+Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only — process, pipe, and signal supervision. What a service does with its pipe is implementation and lives in `docs/TODO.md`. Step 9 is now the TUI transport wiring (9b) and its review (9c); its operator intents, background-worker state receipt, real health indicator, and Textual-closure shutdown intent moved out, since `docs/TODO.md` 0.2 already covers all four. Step 12 keeps the mechanical confirmations and drops the bidirectional-message check as feature verification.
 
 Remaining refactor sequence:
 
-1. Build the Hub's `asyncio` supervision loop (step 8).
-2. Pass a child pipe to the Textual service and wire it functionally (step 9).
+1. Build the Hub's `asyncio` supervision loop (8e).
+2. Pass a child pipe to the Textual service and wire it functionally (9b).
 3. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
 4. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
 
