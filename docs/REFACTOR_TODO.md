@@ -12,7 +12,7 @@ Target for live, backfill, and pipeline, now implemented: drop `pause`/`resume` 
 
 TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. Both are stopped by `SIGTERM`/`SIGINT` instead, with a handler that directly commands the app to exit rather than setting a flag. The TUI is still the one genuine two-way exception for messaging — it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic once step 9 finishes — but its *shutdown* mechanism is signal-based like everything else now, not pipe-EOF-based.
 
-Continue step 8 with Hub command dispatch and the in-memory request ledger. Keep the concrete request-ID representation unresolved until that implementation requires it. Complete the remaining Hub review before starting the TUI integration in step 9.
+Continue step 8 with the real supervision loop (the confirmed `asyncio` rewrite). No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed. Complete the remaining Hub review before starting the TUI integration in step 9.
 
 ## Confirmed target
 
@@ -23,7 +23,7 @@ Continue step 8 with Hub command dispatch and the in-memory request ledger. Keep
 - Pipe EOF is the only signal of Hub loss for live, backfill, and pipeline, checked with a non-blocking `poll()` once per work cycle. It plays no role in stopping the TUI or dashboard — see below. Process sentinels report every child's exit regardless.
 - Live, backfill, and pipeline stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
 - The TUI and dashboard stop through `SIGTERM`/`SIGINT`, since neither has a work cycle to poll a flag between — the handler commands the app to exit directly rather than setting a flag.
-- The Hub keeps request state in memory and discards it when the application session ends.
+- No request state is kept — commands are one-off and fire-and-forget, nothing to track or discard.
 - Only the Hub acquires `hub.lock` directly beneath the `platformdirs` runtime directory.
 - Process identity remains implicit in Hub-owned process handles and pipe endpoints.
 
@@ -33,7 +33,7 @@ Complete and review one numbered file step before beginning the next. Keep each 
 
 Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
-Current integration gap: Hub's supervision loop and its in-memory request ledger remain unimplemented — `run()` is a stub pending the confirmed `asyncio` rewrite. `_handle_message` exists and dispatches `start`/`stop`, but nothing calls it yet.
+Current integration gap: Hub's supervision loop remains unimplemented — `run()` is a stub pending the confirmed `asyncio` rewrite. `_handle_message` exists and dispatches `start`/`stop`, but nothing calls it yet. No ledger gap — none is needed.
 
 ## File sequence
 
@@ -113,7 +113,7 @@ Reopened. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [x] Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] Store each parent endpoint with its role and process handle.
 - [ ] Monitor every pipe endpoint and process sentinel without listener or handler threads. `run()` is currently a stub (`while True: pass` inside a `try`/`except`) — no monitoring happens yet; this is the pending async rewrite.
-- [ ] Add the in-memory request ledger and synchronized request allocation needed by the walking skeleton. `_handle_message` now dispatches `start`/`stop` by calling `_spawn_service`/`_join_service`, but nothing calls `_handle_message` yet and there is no ledger at all. Defer the accepted/completed timeout criterion (`unknown` state, completion timeout, retry-timer restart) until a real situation demonstrates the need. Duplicate-ID idempotency depends on that same deferred retry path, so it is deferred with it; UUID message IDs keep accidental collision out of scope regardless. Keep only synchronized ID allocation for now.
+- [x] No request ledger needed — the walking skeleton only sends one-off, fire-and-forget commands. `_handle_message` dispatches `start`/`stop` straight to `_spawn_service`/`_join_service` with no response and no `message_id` in use anywhere; nothing to track. Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 - [x] Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] Preserve graceful join and forced-termination ownership.
 - [ ] Review the file before continuing. `SERVICE_TYPES`/`ManagedService` including `tui` and `dashboard` is intentional — `_spawn_service` is the uniform spawn path for all five roles.

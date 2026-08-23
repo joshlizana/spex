@@ -62,9 +62,7 @@ The walking skeleton departs from this readiness/degrade contract for the moment
 
 ## Message identity and ordering
 
-The request-ID representation remains unresolved. One synchronized Hub method owns request allocation in memory and preserves request identity across child restarts.
-
-New orchestrator messages allocate a sequence. Responses and errors reuse their request sequence. Services do not allocate outbound sequences. Receivers tolerate duplicates and gaps. Automatic retries reuse the original message ID and sequence. Timestamps remain informational and do not determine ordering.
+Deferred in full for the walking skeleton: commands are one-off and fire-and-forget (`_handle_message` routes `type` straight to an action, no response, no `message_id` in use anywhere). Deferred target, kept for whenever a correlated response is actually needed: the request-ID representation remains unresolved; one synchronized Hub method would own request allocation in memory and preserve request identity across child restarts; new orchestrator messages would allocate a sequence, responses and errors would reuse it, receivers would tolerate duplicates and gaps, automatic retries would reuse the original message ID and sequence.
 
 ## Health and connection loss
 
@@ -74,15 +72,11 @@ Hub shutdown stops every child with `SIGTERM`/`process.terminate()` — the same
 
 ## Command lifecycle
 
-The orchestrator records each command in an in-memory request ledger before dispatch, allocating a synchronized message ID. Request states are `pending`, `completed`, and `failed`, driven only by messages the Hub actually receives. The walking skeleton defers the rest of this section's original target until a real situation demonstrates the need.
-
-Deferred target: `accepted` and `unknown` states; a one-second acceptance timeout and a command-specific completion timeout, both producing `unknown` when missed; "late acceptance restarts the completion timer"; a failed-command retry creating a new request ID; a manual retry of an `unknown` request reusing the same ID.
+Deferred in full — the walking skeleton only sends one-off commands with no tracked lifecycle. Deferred target: an in-memory request ledger recording each command before dispatch; states `pending`, `accepted`, `completed`, `failed`, `unknown`; a one-second acceptance timeout and a command-specific completion timeout, both producing `unknown` when missed; "late acceptance restarts the completion timer"; a failed-command retry creating a new request ID; a manual retry of an `unknown` request reusing the same ID.
 
 ## Request ledger
 
-The Hub owns an in-memory request ledger for the application session, storing at minimum each message ID and its status. It excludes command payloads, results, credentials, and secret values. Hub exit discards the complete ledger because a new Hub begins a new application session.
-
-Deferred target, same basis as above: creation and last-update timestamps in UTC Unix microseconds; one-hour expiry with retry still available after expiry; duplicate-ID short-circuiting, returning stored status instead of executing again. UUID message IDs keep accidental ID collision out of scope independent of this deferral — duplicates only arise from the deferred retry path.
+Deferred in full, same basis as above — no ledger exists or is needed while commands are fire-and-forget. Deferred target: an in-memory ledger for the application session storing message ID, status, and creation/last-update timestamps in UTC Unix microseconds; one-hour expiry with retry still available after expiry; duplicate-ID short-circuiting, returning stored status instead of executing again; excluding command payloads, results, credentials, and secret values; discarded whole on Hub exit. UUID message IDs would keep accidental ID collision out of scope independent of any of this — duplicates would only ever arise from the deferred retry path.
 
 ## Process lock
 
