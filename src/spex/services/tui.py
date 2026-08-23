@@ -1,8 +1,29 @@
 import random
 
+from multiprocessing import connection, get_context
+
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Label, Static
+
+SpawnProcess = get_context("spawn").Process
+
+
+class SpexProcess(SpawnProcess):
+    """Provide shared process lifecycle and Hub control for the Spex TUI."""
+
+    def __init__(self, pipe: connection.Connection):
+        super().__init__()
+        self._pipe: connection.Connection = pipe
+        self._shutdown: bool = False
+
+    def run(self):
+        """Run the Spex TUI until it exits, releasing the Hub pipe afterward."""
+        try:
+            app = Spex()
+            app.run()
+        finally:
+            self._pipe.close()
 
 
 class StatusCircle(Static):

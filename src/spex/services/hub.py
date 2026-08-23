@@ -1,3 +1,5 @@
+import signal
+
 from dataclasses import dataclass
 from multiprocessing import connection, context, get_context
 
@@ -6,12 +8,16 @@ from spex.services.lock import HubLock
 from spex.services.live import LiveService
 from spex.services.pipeline import PipelineService
 from spex.services.service import ServiceProcess
+from spex.services.tui import SpexProcess
+from spex.services.dashboard import DashboardService
 
 
 SERVICE_TYPES = {
     "live": LiveService,
     "backfill": BackfillService,
     "pipeline": PipelineService,
+    "tui": SpexProcess,
+    "dashboard": DashboardService,
 }
 
 
@@ -19,7 +25,7 @@ SERVICE_TYPES = {
 class ManagedService:
     """Represent a managed Spex service."""
 
-    process: ServiceProcess
+    process: ServiceProcess | SpexProcess | DashboardService
     pipe: connection.Connection
     is_running: bool = True
     is_paused: bool = False
@@ -29,7 +35,6 @@ class Hub:
     """Represent the main-process Spex Hub scaffold."""
 
     def __init__(self):
-        self._running: bool = True
         self._lock: HubLock | None = None
         self._spawn_context: context.SpawnContext = get_context("spawn")
         self._services: dict[str, ManagedService] = {}
@@ -40,7 +45,6 @@ class Hub:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._running = False
         try:
             self._join()
         finally:
@@ -50,43 +54,44 @@ class Hub:
     def run(self):
         """Run the Spex Hub supervision loop."""
 
-        while self._running:
-            waitables = {}
-            for role, service in self._services.items():
-                waitables[service.pipe] = (role, "message")
-                waitables[service.process.sentinel] = (role, "exit")
+        self._spawn_service("tui")
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
 
-            for ready in connection.wait(waitables, timeout=0.1):
-                role, event_type = waitables[ready]
-                service = self._services.get(role)
-                if service is None:
-                    continue
+        while True:
+            try:
+                # Wait for messages from tui
+                pass
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                raise
 
-                if event_type == "message":
-                    try:
-                        message = service.pipe.recv()
-                        self._handle_message(role, message)
-                    except (EOFError, OSError):
-                        self._join_service(role)
-                elif event_type == "exit":
-                    self._join_service(role)
+        self._join()
 
-    def _handle_message(self, role: str, message: dict):
+
+    def _signal_handler(self, signum, frame):
+        """Handle signals sent to the Hub process."""
+        if signum in (signal.SIGTERM, signal.SIGINT):
+            self._join()
+
+    def _handle_message(self, message: dict):
         """Handle a message received from a specific service."""
 
         match message.get("type"):
-            case "state":
-                payload = message.get("payload")
-                self._services[role].is_running = payload.get("running")
-                self._services[role].is_paused = payload.get("paused")
+            case "start":
+                service = message.get("role")
+                self._spawn_service(service)
+            case "stop":
+                service = message.get("role")
+                self._join_service(service)
             case _:
                 raise ValueError(
-                    f"Unknown message type from service {role}: "
                     f"{message.get('type')}"
                 )
 
-    def _spawn(self, role: str):
-        """Spawn a new instance of a Spex spoke service."""
+    def _spawn_service(self, role: str):
+        """Spawn a new instance of a Spex service."""
 
         service_type = SERVICE_TYPES.get(role)
         if service_type is None:
@@ -118,14 +123,10 @@ class Hub:
 
         if service is not None:
             service.pipe.close()
-            retry = 0
-            while service.process.is_alive() and retry < 4:
-                service.process.join(timeout=2**retry)
-                retry += 1
 
             if service.process.is_alive():
                 service.process.terminate()
-                service.process.join(timeout=5)
+                service.process.join(timeout=15)
 
             if service.process.is_alive():
                 service.process.kill()

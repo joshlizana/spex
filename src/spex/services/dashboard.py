@@ -1,11 +1,22 @@
 import time
 
+from multiprocessing import connection, get_context
 
-class DashboardService:
-    """Represent the Streamlit dashboard service scaffold."""
+SpawnProcess = get_context("spawn").Process
+
+
+class DashboardService(SpawnProcess):
+    """Represent the dashboard service scaffold."""
+
+    def __init__(self, pipe: connection.Connection):
+        super().__init__()
+        self._pipe: connection.Connection = pipe
+        self._shutdown: bool = False
 
     def run(self):
-        """Run the dashboard service."""
-        # Keep the scaffold alive while the service is running.
-        while True:
-            time.sleep(0.1)
+        """Run dashboard work, releasing the Hub pipe on exit."""
+        try:
+            # Run dashboard work.
+            pass
+        finally:
+            self._pipe.close()
