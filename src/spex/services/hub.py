@@ -97,8 +97,8 @@ class Hub:
                         "events_per_second": 0.0,
                     },
                     "pipeline": {
-                        "events_processed": 0,
-                        "events_per_second": 0.0,
+                        "records_processed": 0,
+                        "records_per_second": 0.0,
                     },
                 }
             },
