@@ -38,21 +38,25 @@ Textual creates the dedicated TUI-Hub `multiprocessing.Pipe(duplex=True)`. The H
 
 The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes. Ingestion and processing send advisory telemetry but receive no application commands. Each worker monitors its connection from a daemon thread to detect Hub loss because the Hub sends nothing on that endpoint.
 
-Every message contains a `type` and `payload`. Role identity remains connection context rather than a repeated message field. The initial state reports the protocol version once during readiness.
+Every message contains a `type` and `payload`. Role identity remains connection context rather than a repeated field in worker messages. The TUI and Hub always run from the same Spex installation on newly created session pipes, so the readiness exchange carries no protocol version.
+
+Workers send `state` when their state changes and send `telemetry` every 250 milliseconds. Ingestion state contains `running` and `phase`; pipeline state contains `running`. Each service calculates its own named metrics and publishes a fresh, immutable snapshot. The base service telemetry thread is the sole pipe writer and sends the latest snapshot, while service-specific metric-monitor threads never write to the pipe. A snapshot may be nearly 500 milliseconds old when the two 250-millisecond schedules align in the worst case.
+
+The Hub preserves each worker payload unchanged and packages it beneath the role established by that worker's pipe. Hub-to-TUI `state` and `telemetry` payloads contain a `services` mapping from role to the original role-specific payload. The Hub may synthesize or override `running` when the authoritative process handle shows that a worker exited. Telemetry fields retain the names selected by their service, such as `events_received` and `events_per_second` for ingestion or `records_processed` and `records_per_second` for pipeline.
 
 ## Hub readiness
 
-The Hub's first message is either `ready`, carrying the protocol version and complete initial service-state snapshot, or `error`, carrying a startup failure suitable for display. Textual waits for this result before entering its application event loop.
+The Hub's first message is either `ready`, carrying the complete initial `services` state mapping, or `error`, carrying a startup failure suitable for display. Textual waits for this result before entering its application event loop.
 
 The Hub sends `ready` after it acquires the application lock, validates configuration, and starts every operational service. Pipe creation and transfer occur as part of process creation and require no connection retry or acknowledgment.
 
-The `state` message carries either one service update or a complete service snapshot, with its payload identifying the included scope. Ingestion state includes its `replay` or `live` phase. Worker telemetry is advisory; the Hub derives authoritative running/unavailable state from process handles and sentinels.
+After readiness, the Hub sends `state` when a service changes and aggregated `telemetry` every 250 milliseconds. Ingestion state includes its `replay` or `live` phase. Worker state and telemetry are advisory; the Hub derives authoritative running or unavailable state from process handles and sentinels.
 
 The TUI exposes no service-lifecycle messages. Closing Textual requests application shutdown through pipe EOF rather than an application message.
 
-An invalid readiness message or protocol mismatch closes the TUI pipe and reports startup failure. After readiness, an invalid state message closes the connection and marks the TUI degraded. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
+An invalid readiness message closes the TUI pipe and reports startup failure. After readiness, an invalid `state` or `telemetry` message closes the connection and marks the TUI degraded. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
 
-The walking skeleton implements the initial `ready` or `error` exchange and waits for it before entering Textual. The Hub acquires its lock and starts every operational service before sending the current payload-free `ready` message. The protocol version and initial state remain part of the state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
+The walking skeleton implements the initial `ready` or `error` exchange and waits for it before entering Textual. The Hub acquires its lock and starts every operational service before sending the current payload-free `ready` message. The initial state snapshot remains to be implemented. No command identity, protocol negotiation, or request ordering is required because the TUI sends no lifecycle commands.
 
 ## Health and connection loss
 
@@ -83,7 +87,3 @@ Closing Textual closes its Hub endpoint and then joins the Hub process. Hub EOF 
 ## Standard retry policy
 
 Every retrying operation uses four exponential intervals within a 15-second retry window. Retry indices `0` through `3` use `2 ** retry_index` seconds: 1, 2, 4, and 8 seconds. An exception requires a documented design decision.
-
-## Open questions
-
-- What state and health payload fields does the TUI require?

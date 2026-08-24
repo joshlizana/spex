@@ -27,7 +27,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 ## Resume point
 
-The control-plane refactor and integration checkpoint are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 with state exchange and real health. No request ledger is needed.
+The control-plane refactor and integration checkpoint are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 by implementing the agreed state and telemetry exchange, then connect it to real TUI health. No request ledger is needed.
 
 Hub review findings are resolved. `_join_service`'s blocking terminate/kill escalation runs through `asyncio.to_thread`, and `_join` overlaps every child's escalation under one `asyncio.gather`. `run()` owns supervision on one event loop; signal handlers only record shutdown intent, and the Hub context completes child cleanup before releasing the lock.
 
@@ -37,11 +37,13 @@ Steps 1 through 8 in `REFACTOR_TODO.md` contain the completed direct-pipe work. 
 
 Verified by test and worth remembering: `Connection.poll()` reports readability, not EOF specifically. A worker's bare poll remains sound while the Hub sends it no messages; worker-to-Hub telemetry does not make the worker endpoint readable. The Hub must receive telemetry explicitly and treat `EOFError` as child loss.
 
-The Hub starts ingestion, pipeline, and dashboard while entering its lock-and-cleanup context, then reports `ready` to Textual. Partial startup failure joins every child already registered and releases the Hub lock before propagating an error. The next implementation step removes the transitional `start` and `stop` handler, drains worker telemetry, and forwards aggregated state to Textual. Textual provides configuration and operational visibility without start, stop, pause, resume, or manual-restart controls.
+The Hub starts ingestion, pipeline, and dashboard while entering its lock-and-cleanup context, then reports `ready` to Textual. Partial startup failure joins every child already registered and releases the Hub lock before propagating an error. The next implementation step removes the transitional `start` and `stop` handler, drains worker state and telemetry, and forwards role-keyed payloads to Textual. Textual provides configuration and operational visibility without start, stop, pause, resume, or manual-restart controls.
+
+The normal Hub-to-TUI messages are `ready`, change-driven `state`, and 250-millisecond `telemetry`; `error` is the startup alternative to `ready`, and pipe EOF reports connection loss. Readiness contains the complete initial `services` state mapping and no protocol version. Each worker calculates its named metrics, publishes fresh immutable snapshots, and lets the base telemetry reporter remain the sole pipe writer. The Hub identifies the role from the pipe, preserves the role-specific payload unchanged, and only synthesizes or overrides `running` from authoritative process liveness. Hub loss closes Textual; a later invocation creates a clean session rather than restarting the Hub in place.
 
 TUI and dashboard are long-lived and non-cyclic, so both use pipe-monitor threads. Textual runs in the main process and exits through its interface; closing its pipe ends the Hub. Verified this session: Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so Ctrl-C delivers a literal `\x03` byte to Textual and no `SIGINT` to the foreground process group. Spex has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`.
 
-The TUI waits for the Hub's first `ready` or `error` message before starting its pipe-monitor thread or entering Textual. Lock contention, configuration loading, and operational-service startup all occur before `ready`; failure returns a deterministic startup error. Handshake failure also stops and joins the Hub and closes the parent pipe. The current `ready` message carries no protocol version or service snapshot, so the complete readiness payload remains with the state-exchange work.
+The TUI waits for the Hub's first `ready` or `error` message before starting its pipe-monitor thread or entering Textual. Lock contention, configuration loading, and operational-service startup all occur before `ready`; failure returns a deterministic startup error. Handshake failure also stops and joins the Hub and closes the parent pipe. The current `ready` message carries no service snapshot, so the complete readiness payload remains with the state-exchange implementation.
 
 Worker pipe monitoring now runs from a daemon thread, so Hub loss is detected during a work cycle. A send lock remains unnecessary until telemetry introduces concurrent sends.
 
