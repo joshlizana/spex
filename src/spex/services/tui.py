@@ -94,7 +94,8 @@ class Spex:
             if message.get("type") == "ready":
                 return
             elif message.get("type") == "error":
-                raise RuntimeError(f"Hub error: {message.get('message')}")
+                error_message = message.get("payload", {}).get("message")
+                raise RuntimeError(f"Hub error: {error_message}")
             else:
                 raise RuntimeError(f"Unexpected Hub message: {message}")
         except (EOFError, OSError):

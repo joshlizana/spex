@@ -38,6 +38,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Start ingestion, processing, and dashboard automatically before the Hub reports readiness.
 - Define change-driven service state and 250-millisecond role-keyed telemetry between workers, the Hub, and Textual.
 - Apply persisted configuration changes, including retention changes, on the next application start.
+- Add role-keyed worker state and telemetry forwarding with automatic replacement after child-process loss.
 
 ### Changed
 

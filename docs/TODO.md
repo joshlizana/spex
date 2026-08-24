@@ -42,7 +42,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
 - [x] Define the minimal readiness, state, and health messages needed by the slice.
 - [x] Define worker telemetry envelopes and Hub state aggregation.
-- [ ] Drain worker telemetry in the Hub and forward service-state snapshots or updates to Textual.
+- [x] Drain worker telemetry in the Hub and forward service-state snapshots or updates to Textual.
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
 - [ ] Show actual child-process and connection state in the Textual status view.
 - [x] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
