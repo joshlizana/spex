@@ -40,29 +40,25 @@ The Hub retains each parent endpoint under the role and process handle it launch
 
 Every message contains a `type` and `payload`. Role identity remains connection context rather than a repeated message field. The initial state reports the protocol version once during readiness.
 
-## Child readiness
+## Hub readiness
 
-The TUI's first message carries its initial state and protocol version. The Hub associates it with the dedicated pipe received from its Textual parent.
+The Hub's first message is either `ready`, carrying the protocol version and complete initial service-state snapshot, or `error`, carrying a startup failure suitable for display. Textual waits for this result before entering its application event loop.
 
-The TUI becomes ready after the Hub accepts its initial state. Pipe creation and transfer occur as part of process creation and have no connection retry or hello acknowledgment.
-
-Acknowledgment message types use the `<type>_ack` naming convention. An acknowledgment confirms receipt or protocol acceptance and does not represent completion of an asynchronous operation.
+The Hub sends `ready` after it acquires the application lock, validates configuration, and starts every operational service. Pipe creation and transfer occur as part of process creation and require no connection retry or acknowledgment.
 
 The `state` message carries either one service update or a complete service snapshot, with its payload identifying the included scope. Ingestion state includes its `replay` or `live` phase. Worker telemetry is advisory; the Hub derives authoritative running/unavailable state from process handles and sentinels.
 
 The TUI exposes no service-lifecycle messages. Closing Textual requests application shutdown through pipe EOF rather than an application message.
 
-An invalid initial-state message or protocol mismatch closes the TUI pipe and marks it degraded.
-
-After readiness, an invalid message closes the connection and marks the TUI degraded. An unknown message type returns an error without closing the connection. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
+An invalid readiness message or protocol mismatch closes the TUI pipe and reports startup failure. After readiness, an invalid state message closes the connection and marks the TUI degraded. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
 
 The walking skeleton still needs to implement this readiness and state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
 
 ## Health and connection loss
 
-Textual monitors the Hub's pipe from a daemon thread and retains the Hub process handle. The Hub monitors the TUI pipe plus every operational child's process sentinel and pipe endpoint. For ingestion and processing, pipe EOF means the Hub itself is gone. The TUI exits through Textual's thread-safe boundary on Hub EOF; the dashboard ends its placeholder loop on Hub EOF. Detecting a peer that remains alive but stops responding is deferred with the rest of the command lifecycle below; the walking skeleton has no command timeouts.
+Textual monitors the Hub's pipe from a daemon thread and retains the Hub process handle. The Hub monitors the TUI pipe plus every operational child's process sentinel and pipe endpoint. For ingestion and processing, pipe EOF means the Hub itself is gone. The TUI exits through Textual's thread-safe boundary on Hub EOF; the dashboard ends its placeholder loop on Hub EOF. Detecting a peer that remains alive but stops reporting is deferred; the walking skeleton has no heartbeats or telemetry timeouts.
 
-The Hub supervises from an `asyncio` loop in its own process, with no listener or handler threads. Each pass polls and receives the TUI endpoint, driving command handling, then judges every operational child by its process sentinel. TUI pipe EOF ends the loop because Spex has no headless mode. An operational child's exit is joined and dropped, and supervision continues. Advisory telemetry drainage remains deferred with its producers. Passes are separated by a fixed one-hundred-millisecond sleep.
+The Hub supervises from an `asyncio` loop in its own process, with no listener or handler threads. Each pass checks the TUI endpoint for EOF, drains worker telemetry, and judges every operational child by its process sentinel. TUI pipe EOF ends the loop because Spex has no headless mode. An operational child's exit is joined and dropped, and supervision continues. The Hub combines advisory telemetry with authoritative process liveness and forwards state snapshots or updates to Textual. Passes are separated by a fixed one-hundred-millisecond sleep.
 
 Blocking calls stay off the event loop. `multiprocessing` joins are synchronous, so every terminate/kill escalation runs through `asyncio.to_thread`, and application shutdown escalates all children concurrently under a single `asyncio.gather` rather than serially. The Hub is an async context manager: teardown awaits the join before releasing the process lock, so the lock outlives every child it supervises. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then remains unavailable until the application restarts if attempts exhaust.
 

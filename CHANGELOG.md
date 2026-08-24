@@ -52,7 +52,8 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Monitor the dashboard's Hub pipe from a background thread and stop its service loop on pipe loss.
 - Run Textual in the main process and let it spawn and supervise the Hub through a direct pipe.
 - Let the Hub own the ingestion, pipeline, and dashboard processes under its async lock-and-cleanup context.
-- Start every operational service with the Hub and omit TUI service-lifecycle controls.
+- Select automatic startup of every operational service after Hub readiness and configuration validation, and omit TUI service-lifecycle controls.
+- Route advisory worker telemetry through the Hub to Textual while retaining process handles and sentinels as authoritative liveness.
 - Refactor the live-service scaffold to receive native control dictionaries through its Hub-created pipe and exit on pipe loss.
 - Apply the reviewed pipe-control lifecycle to the backfill-service scaffold.
 - Extract the shared worker lifecycle into `ServiceProcess` and reduce live, backfill, and pipeline to bounded-work subclasses.

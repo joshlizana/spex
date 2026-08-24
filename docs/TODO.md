@@ -31,7 +31,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Create a dedicated duplex control pipe before spawning each process.
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [x] Run Textual in the main process and spawn the Hub as a non-daemonic IPC process.
-- [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
+- [ ] Complete the TUI readiness, pipe-loss, and exit lifecycle.
 - [ ] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Start ingestion, processing, and dashboard automatically after Hub readiness and configuration validation.
@@ -40,7 +40,9 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Launch the Hub and every operational child with `multiprocessing.Process` and retain each process handle at its ownership boundary.
 - [x] Monitor Hub-owned child pipe endpoints independently of Textual.
 - [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
-- [x] Define the minimal control and health messages needed by the slice.
+- [x] Define the minimal readiness, state, and health messages needed by the slice.
+- [ ] Define worker telemetry envelopes and Hub state aggregation.
+- [ ] Drain worker telemetry in the Hub and forward service-state snapshots or updates to Textual.
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
 - [ ] Show actual child-process and connection state in the Textual status view.
 - [x] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.

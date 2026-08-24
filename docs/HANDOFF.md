@@ -19,7 +19,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 - `Spex` owns the main-process Textual app and Hub child lifecycle. `DashboardService` is a long-lived `SpawnProcess`; both use daemon pipe-monitor threads. Hub EOF exits Textual through its thread-safe boundary, while dashboard EOF sets its shutdown flag.
 - The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages.
 - Every operational child receives a Hub-created duplex `multiprocessing.Pipe`; Textual creates its own pipe before spawning the Hub. Ingestion and processing send advisory telemetry but receive no commands under the target design; the current scaffolds have not implemented that telemetry yet.
-- Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
+- Pipe ownership supplies each child's identity. The TUI sends no service-lifecycle messages; the Hub sends readiness and aggregated service state upward through their dedicated pipe.
 - `_spawn_service` creates each operational child's pipe pair, passes the child endpoint, and closes the unused copy. The three Hub-owned roles are `ingest`, `pipeline`, and `dashboard`.
 - The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass polls the TUI pipe and checks operational-service sentinels. TUI EOF ends the loop; worker loss is joined and dropped without stopping the Hub. Blocking joins run through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub context completes cleanup before releasing the lock.
 - Worker scaffolds stop gracefully through `SIGTERM`/`SIGINT`, checked as a flag between cycles. Textual exits through its interface, closes the Hub pipe, and joins the Hub. Dashboard needs no handler; termination without one is acceptable.
@@ -37,7 +37,7 @@ Steps 1 through 8 in `REFACTOR_TODO.md` contain the completed direct-pipe work. 
 
 Verified by test and worth remembering: `Connection.poll()` reports readability, not EOF specifically. A worker's bare poll remains sound while the Hub sends it no messages; worker-to-Hub telemetry does not make the worker endpoint readable. The Hub must receive telemetry explicitly and treat `EOFError` as child loss.
 
-The Hub starts ingestion, pipeline, and dashboard during startup. Textual provides configuration and operational visibility without start, stop, pause, resume, or manual-restart controls.
+The current Hub still waits for transitional `start` and `stop` messages that the target TUI no longer sends. The next implementation step removes that handler, starts ingestion, pipeline, and dashboard after Hub readiness and configuration validation, drains their advisory telemetry, and forwards aggregated state to Textual. Textual provides configuration and operational visibility without start, stop, pause, resume, or manual-restart controls.
 
 TUI and dashboard are long-lived and non-cyclic, so both use pipe-monitor threads. Textual runs in the main process and exits through its interface; closing its pipe ends the Hub. Verified this session: Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so Ctrl-C delivers a literal `\x03` byte to Textual and no `SIGINT` to the foreground process group. Spex has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`.
 
@@ -64,7 +64,7 @@ The control-plane refactor sequence is complete.
 - All ten source modules import successfully under the project environment.
 - A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
-- Control-plane integration passes for the implemented command scaffold and shutdown lifecycle. A real PTY `spex` run starts Textual in the main process and exits the complete application through `q` with code zero. Automatic operational-service startup is the next implementation step.
+- Control-plane integration passes for the implemented transport scaffold and shutdown lifecycle. A real PTY `spex` run starts Textual in the main process and exits the complete application through `q` with code zero. Automatic operational-service startup is the next implementation step.
 
 ## Primary references
 
