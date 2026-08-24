@@ -1,6 +1,6 @@
 # Spex
 
-Spex is a Bluesky Jetstream v2 data pipeline. It ingests live and historical event data, validates and transforms records, and serves analytics through a DuckLake data mart and Streamlit dashboard.
+Spex is a Bluesky Jetstream v2 data pipeline. One ingestion service replays historical events and transitions to the live stream, then Spex validates and transforms records and serves analytics through a DuckLake data mart and Streamlit dashboard.
 
 ## Development status
 
@@ -40,17 +40,15 @@ spex
 
 Spex uses focused logical components within one application, with one responsibility per component:
 
-- Live-stream ingestion consumes Jetstream events over WebSocket.
-- Historical backfill ingestion retrieves data from the same Jetstream endpoint over HTTP.
+- Ingestion uses the ATProto Python SDK to replay the Jetstream archive and transition to the live stream without a gap.
 - Validation checks incoming records.
 - Transformation prepares validated records for analytical use.
 - A DuckLake data mart stores and serves transformed data.
 
-The complete application runs six processes:
+The complete application runs five processes:
 
 - Hub
-- Historical backfill
-- Live ingestion
+- Ingestion
 - Validation and transformation
 - Streamlit dashboard
 - Textual terminal interface

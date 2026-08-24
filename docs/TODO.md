@@ -8,16 +8,17 @@ The active control-plane rewrite follows the file-by-file checklist in [Control-
 
 ### 0. Deliver the walking skeleton
 
-This deliberately thin slice proves both complete ingestion paths with one live post and one backfilled post before hardening any component.
+This deliberately thin slice proves both ingestion phases with one replayed post and one live post before hardening any component.
 
 #### 0.1 Complete the executable foundation
 
 - [x] Create a minimal Textual interface with one status view.
 - [x] Remove the obsolete Typer runtime dependency from the package configuration.
-- [x] Select `websockets`, HTTPX, Streamlit, and `platformdirs` as the additional dependencies required by the slice.
-- [x] Add the selected walking-skeleton dependencies and refresh `uv.lock`.
+- [x] Select Streamlit and `platformdirs` as additional dependencies required by the slice.
+- [ ] Replace direct `websockets` and HTTPX ingestion use with a pinned `atproto` release containing `atproto_jetstream` and refresh `uv.lock`.
 - [x] Use the `spawn` multiprocessing context on every supported platform.
-- [x] Create importable service scaffolds for live ingestion, backfill, validation and transformation, and Streamlit.
+- [x] Create importable service scaffolds for live ingestion, backfill, validation and transformation, and Streamlit; the separate ingestion scaffolds are now transitional.
+- [ ] Replace the live and backfill scaffolds with one ingestion service.
 - [x] Resolve M0 raw files and DuckLake data under the Spex application-data directory provided by `platformdirs`.
 - [x] Define the exact M0 data, configuration, and runtime paths beneath the resolved `platformdirs` roots.
 - [x] Bootstrap the accepted directory tree before starting application processes.
@@ -25,7 +26,7 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 
 #### 0.2 Establish the minimal control plane
 
-- [x] Define the walking-skeleton service state as the `running` and `paused` booleans, with `running=false` taking precedence.
+- [x] Define the walking-skeleton service state as running or stopped, with ingestion additionally reporting `replay` or `live`.
 - [ ] Create the dedicated main-process orchestrator and explicit `spawn` context.
 - [ ] Create a dedicated duplex control pipe before spawning each child.
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
@@ -33,8 +34,9 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 - [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Define the walking-skeleton service transitions.
-- [ ] Add Textual controls for starting and stopping live ingestion and backfill.
-- [ ] Start validation and transformation automatically with either ingestion service.
+- [ ] Add a Textual control for starting and stopping ingestion.
+- [ ] Show ingestion's `replay` or `live` phase.
+- [ ] Start validation and transformation automatically with ingestion.
 - [ ] Launch every child with `multiprocessing.Process` and retain its process handle.
 - [ ] Monitor orchestrator-owned child pipe endpoints independently of Textual.
 - [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
@@ -45,37 +47,38 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 
 #### 0.3 Establish the shared storage path
 
-- [ ] Define the minimal JSON Lines event envelope and completed-file handoff used by both ingestion processes.
+- [ ] Define the minimal JSON Lines event envelope and completed-file handoff used by ingestion and processing.
 - [ ] Implement a replaceable raw-store interface backed by the minimal JSON Lines path.
-- [ ] Keep live and backfill writes separate while exposing one processing input boundary.
+- [ ] Keep one raw writer and one durable ingestion cursor across replay and live.
 - [ ] Define the minimal DuckLake catalog, database, schema, and posts table required by the slice.
 - [ ] Define how processing confirms a raw event is represented in DuckLake for the slice.
 
-#### 0.4 Complete live ingestion
+#### 0.4 Complete ingestion
 
-- [ ] Select the walking-skeleton WebSocket client.
-- [ ] Connect to the fixed Jetstream live endpoint.
+- [ ] Add and pin an `atproto` release containing `atproto_jetstream`.
+- [ ] Connect to the fixed Jetstream v2 endpoint with one ingestion service.
 - [ ] Subscribe only to `app.bsky.feed.post` without a DID filter.
-- [ ] Receive and persist one live post mutation through the raw-store boundary.
-- [ ] Report live-ingestion state and failure to Textual.
+- [ ] Read the test archive credential from an environment variable without persisting it.
+- [ ] Use `atproto_jetstream.replay()` to receive and persist one replayed post mutation.
+- [ ] Confirm the SDK transitions to the live tail and receive one live post mutation.
+- [ ] Persist one cursor across both phases.
+- [ ] Report ingestion state, `replay` or `live` phase, and failure to Textual.
 
-#### 0.5 Complete historical backfill
+#### 0.5 Confirm replay and live behavior
 
-- [ ] Name and document the test-only archive credential environment variable.
-- [ ] Validate that the credential exists before starting backfill.
-- [ ] Select the walking-skeleton HTTP client.
-- [ ] Request a minimal archive range containing `app.bsky.feed.post` records.
-- [ ] Receive and persist one backfilled post mutation through the same raw-store boundary.
-- [ ] Report backfill state and failure to Textual without exposing the credential.
+- [ ] Confirm replay's exclusive lower cursor bound and the SDK-managed inclusive live cutover.
+- [ ] Confirm seam and reconnect redelivery are suppressed by the SDK cursor.
+- [ ] Confirm crash recovery can replay durable raw records and remains idempotent downstream.
+- [ ] Confirm live-only operation starts in `live` when archive access is unavailable.
 
 #### 0.6 Complete processing and persistence
 
-- [ ] Read completed raw input from both ingestion sources.
+- [ ] Read completed raw input from ingestion.
 - [ ] Decode the Jetstream commit envelope and `app.bsky.feed.post` record.
 - [ ] Validate only the envelope, DID, record identity, text, and timestamps required by the slice.
-- [ ] Transform live and backfilled posts through one mapping.
+- [ ] Transform replayed and live posts through one mapping.
 - [ ] Preserve enough source identity to trace each output row to its Jetstream mutation.
-- [ ] Insert both mutations into the minimal DuckLake posts table.
+- [ ] Insert both phase examples into the minimal DuckLake posts table.
 - [ ] Report processing and persistence state or failure to Textual.
 
 #### 0.7 Complete the analytical view
@@ -90,7 +93,7 @@ This deliberately thin slice proves both complete ingestion paths with one live 
 #### 0.8 Verify and close the slice
 
 - [ ] Trace one live record from Jetstream through raw storage, processing, DuckLake, and Streamlit.
-- [ ] Trace one backfilled record through the same downstream path.
+- [ ] Trace one replayed record through the same downstream path.
 - [ ] Confirm the displayed rows retain the identity of the ingested mutations.
 - [ ] Confirm Textual remains responsive while its IPC reader and service work run.
 - [ ] Confirm closing Textual causes the orchestrator to stop and join every child process.
@@ -129,14 +132,14 @@ The slice excludes persistent credential storage, complete collection coverage, 
 - [ ] Select the raw-retention format from recorded evidence.
 - [ ] Build the selected raw-store boundary with capacity control, checkpoints, replay, and confirmed-consumption deletion.
 
-### 5. Deliver the live vertical slice
+### 5. Deliver the ingestion vertical slice
 
-- [ ] Connect live ingestion to Jetstream with the fixed collection filter.
-- [ ] Persist live events through the raw-store boundary.
+- [ ] Connect ingestion to Jetstream with the fixed collection filter.
+- [ ] Persist replayed and live events through one raw-store boundary.
 - [ ] Validate and transform one profiled collection.
 - [ ] Insert mutation history and rejected records into DuckLake.
 - [ ] Query the retained mutation and current-state views.
-- [ ] Verify reconnection, replay, deduplication, and restart recovery end to end.
+- [ ] Verify replay-to-live transition, reconnection, deduplication, and restart recovery end to end.
 
 ### 6. Complete pipeline coverage and retention
 
@@ -145,12 +148,12 @@ The slice excludes persistent credential storage, complete collection coverage, 
 - [ ] Add graceful processing drain and in-flight batch commit.
 - [ ] Verify out-of-order batches, rejection handling, capacity pauses, and cleanup failure recovery.
 
-### 7. Deliver historical backfill
+### 7. Complete replay and credentials
 
 - [ ] Establish archive-bound probing and timeframe-to-sequence mapping.
 - [ ] Add master-password-protected credential storage and session unlock.
-- [ ] Connect authenticated backfill to the shared raw-store boundary.
-- [ ] Verify concurrent live and backfill ingestion with overlap and out-of-order delivery.
+- [ ] Connect authenticated replay to the ingestion service.
+- [ ] Verify archive replay and the transition to live through one cursor and raw writer.
 
 ### 8. Deliver operational control
 
@@ -182,8 +185,8 @@ Resolve these items when their roadmap increment becomes active.
 - [x] Supervise each named service through a direct `multiprocessing.Process` handle.
 - [x] Assign listener ownership and connection monitoring to the dedicated main-process orchestrator.
 - [x] Return TUI connection-reader state through `post_message()` or `call_from_thread()`.
-- [x] Define walking-skeleton completion as a runnable application that starts the TUI and orchestrator, activates live ingestion, backfill, and processing, and displays transformed data in Streamlit.
-- [x] Prove live and backfill ingestion through the same downstream storage and processing path.
+- [x] Define walking-skeleton completion as a runnable application that starts the TUI and orchestrator, activates ingestion and processing, and displays replayed and live data in Streamlit.
+- [x] Prove replay and live ingestion through the same downstream storage and processing path.
 - [x] Read the archive credential from an environment variable while testing the slice and defer persistent encrypted credential storage.
 - [x] Limit the first analytical record to post text.
 - [x] Limit the first TUI status view to service health.
@@ -191,7 +194,7 @@ Resolve these items when their roadmap increment becomes active.
 - [x] Include post counts grouped by DID in the first Streamlit view.
 - [x] Retain public Jetstream data without anonymization in local Spex storage.
 - [x] Define the initial demonstration as an extremely basic working data pipeline.
-- [x] Verify that one live post and one backfilled post decode, ingest, transform, persist, and appear in Streamlit.
+- [x] Verify that one replayed post and one live post decode, ingest, transform, persist, and appear in Streamlit.
 
 ## 1. Shared platform foundation
 
@@ -230,8 +233,8 @@ Resolve these items when their roadmap increment becomes active.
 ### Process lifecycle
 
 - [ ] Define process readiness and shutdown behavior.
-- [ ] Define TUI controls for starting and stopping live ingestion and backfill.
-- [ ] Test automatic validation-and-transformation startup with either ingestion service.
+- [ ] Define the TUI control for starting and stopping ingestion.
+- [ ] Test automatic validation-and-transformation startup with ingestion.
 - [ ] Test graceful child shutdown after main-process loss.
 - [ ] Test worker restart exhaustion, degraded health, and manual restart.
 
@@ -281,20 +284,21 @@ This phase is a research gate for ingestion and downstream batch processing.
 - [ ] Define persistence and replay behavior between ingestion and processing.
 - [ ] Define raw-capacity enforcement, pause, and resume behavior.
 - [ ] Define how the pipeline confirms data-mart or rejected-record consumption before deleting raw events.
-- [ ] Define durable state-artifact names for live ingestion and backfill if JSON Lines is selected.
+- [ ] Define the ingestion state-artifact name if JSON Lines is selected.
 - [ ] Define deterministic state reconstruction if JSON Lines is selected.
 - [ ] Benchmark per-line and grouped durable sync while preserving record-before-checkpoint ordering if JSON Lines is selected.
 - [ ] Profile validation and transformation batch sizes against the 100 MiB rotation boundary if JSON Lines is selected.
 
-## 5. Live ingestion
+## 5. Ingestion
 
-- [ ] Define the live-ingestion component contract.
-- [ ] Define live connection, reconnection, and checkpoint behavior.
-- [ ] Define how first-run ingestion discovers the oldest unsealed sequence within retention.
-- [ ] Design durable sequence checkpoints and idempotent replay.
+- [ ] Define the ingestion component contract and its `replay` and `live` phases.
+- [ ] Pin the minimum `atproto` version that supplies the required `atproto_jetstream` API.
+- [ ] Define replay, live connection, reconnection, and durable-cursor behavior.
+- [ ] Define how first-run ingestion maps retention to its replay cursor.
+- [ ] Design durable cursor persistence and idempotent crash recovery.
 - [ ] Define collection filtering for posts, reposts, likes, blocks, and follows.
 - [ ] Test raw-capacity pause and resume without intentional event loss.
-- [ ] Test checkpoint recovery, inclusive replay, and downstream deduplication.
+- [ ] Test SDK seam deduplication, cursor recovery, inclusive replay after crashes, and downstream deduplication.
 
 ## 6. Validation and transformation
 
@@ -321,19 +325,19 @@ This phase is a research gate for ingestion and downstream batch processing.
 - [ ] Define query-performance criteria that justify materializing current state.
 - [ ] Define how Streamlit receives read-only DuckLake access.
 
-## 8. Historical backfill and credential security
+## 8. Replay and credential security
 
-- [ ] Define the backfill component contract.
+- [ ] Define replay configuration within the ingestion contract.
 - [ ] Probe available archive bounds and record observed behavior.
-- [ ] Select default `afterSeq` and `beforeSeq` bounds.
-- [ ] Determine how user-selected timeframes map to Jetstream sequence bounds.
+- [ ] Select the default replay `after_seq` cursor.
+- [ ] Determine how user-selected timeframes map to Jetstream sequences.
 - [ ] Define how the TUI reports variable archive availability against configured retention.
 - [ ] Select the authenticated-encryption format and library for the master-password-protected credential file.
 - [ ] Select the password-based key-derivation algorithm and parameters.
 - [ ] Define credential-file location, permissions, corruption handling, and migration.
-- [ ] Define secure credential transfer from the main process to backfill.
+- [ ] Define secure credential transfer from the main process to ingestion.
 - [ ] Validate encrypted credential storage on Linux and Arch Linux under WSL.
-- [ ] Test concurrent live and backfill ingestion with overlapping and out-of-order events.
+- [ ] Test replay-to-live cutover, reconnect deduplication, and live-only operation.
 
 ## 9. Textual operational interface
 
@@ -341,9 +345,9 @@ This phase is a research gate for ingestion and downstream batch processing.
 - [ ] Define how the TUI obtains service state and metrics.
 - [ ] Define retained rejection counts and cleanup-failure details.
 - [ ] Define the retention-setting workflow and validation.
-- [ ] Define retention-increase backfill offers and retention-decrease data-loss confirmation.
+- [ ] Define retention-increase replay offers and retention-decrease data-loss confirmation.
 - [ ] Define raw-capacity configuration and available-disk display.
-- [ ] Define credential setup and backfill unlock workflows.
+- [ ] Define credential setup and replay unlock workflows.
 - [ ] Define persistent and acknowledgment-cleared warnings.
 
 ## 10. Streamlit analytical interface

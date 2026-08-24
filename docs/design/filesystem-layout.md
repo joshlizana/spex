@@ -37,8 +37,6 @@ The complete logical layout is:
 ```text
 user_data_path/
 ├── raw/
-│   ├── live/
-│   └── backfill/
 ├── ducklake/
 ├── rejected/
 └── credentials/
@@ -65,8 +63,7 @@ The M0 subset is:
 
 ```text
 user_data_path/
-├── raw/live/
-├── raw/backfill/
+├── raw/
 └── ducklake/
 
 user_runtime_path/hub.lock

@@ -10,7 +10,7 @@ Evaluate Python-native options for supervising Spex's long-lived local services 
 
 Compare official documentation for the Python standard library, Joblib, Loky, Pebble, and MPIRE against the confirmed Spex process model:
 
-- Five named child processes with different responsibilities.
+- Four named child processes with different responsibilities: Textual, ingestion, processing, and Streamlit. This topology reflects the later consolidated-ingestion decision.
 - A dedicated main-process orchestrator and a Textual child process.
 - Explicit start, stop, restart, readiness, pipe-loss, and degraded states.
 - Stable role ownership and service-instance identities.

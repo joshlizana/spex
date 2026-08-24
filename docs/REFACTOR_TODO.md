@@ -6,25 +6,27 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 ## Resume here
 
-Steps 1 through 8 are complete and stand. Step 9 is partly done — see each section below.
+Steps 1 through 8 contain the completed direct-pipe work, but their separate live and backfill roles are now transitional. Step 9 is partly done — see each section below.
 
-Target for live, backfill, and pipeline, now implemented: drop `pause`/`resume` entirely, a service is only running or stopped. `start` stays spawn-only. Operator-initiated `stop` moves to `process.terminate()` (`SIGTERM`) — `ServiceProcess` installs a shared handler so the current work cycle ends gracefully; each subclass still only differs in its unit of work per cycle. Each of the three still receives a Hub-owned pipe, but only to detect Hub loss: nothing is ever sent on it, and a non-blocking `poll()` once per work cycle (no background thread) is enough to notice EOF and stop the same way `SIGTERM` does.
+The target topology has one ingestion service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity. Joshua consolidates the scaffolds and Hub registry before entry-point integration; the reviewed pipe, signal, and supervision mechanisms remain applicable.
+
+The transitional live, backfill, and pipeline scaffolds implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection between bounded work cycles. The consolidated ingestion and processing workers retain that lifecycle.
 
 TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `Spex.exit()` covers only the abnormal path — an external kill of the Hub or a supervisor exception, where `_join()` would otherwise terminate the TUI unhandled and leave the terminal in raw mode — and is tracked in `docs/TODO.md` 0.2 as implementation rather than refactor scope. The TUI is still the one genuine two-way exception for messaging: it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic once step 9 finishes.
 
-Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
+Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. Spex currently has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
 
-Continue at 9b, wiring the TUI's child pipe endpoint functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing passes it to the `Spex` app or reads it. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
+First replace the separate live and backfill roles with one ingestion scaffold and update the Hub registry. Then continue at 9b, wiring the TUI's child pipe endpoint functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing passes it to the `Spex` app or reads it. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
 
 ## Confirmed target
 
 - The Hub creates every child process and retains its process handle.
 - The Hub creates a duplex `multiprocessing.Pipe` for every child and passes one endpoint during spawn.
-- The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Live, backfill, pipeline, and dashboard never send or receive a message on theirs.
+- The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Ingestion and processing send advisory telemetry, including ingestion's phase, but receive no commands. Dashboard sends no messages.
 - Pipe ownership supplies service identity for every child. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges — only the TUI ever sends one.
-- Pipe EOF is the only signal of Hub loss for live, backfill, and pipeline, checked with a non-blocking `poll()` once per work cycle. It also serves the dashboard. It plays no role in stopping the TUI, which exits through its interface. Process sentinels report every child's exit regardless.
-- `poll()` reports readability, not EOF specifically: it returns `True` for a waiting message just as it does for a closed peer, verified by test. This is sound only while nothing is ever sent to these children. Any step that starts sending to live, backfill, or pipeline must replace the bare `poll()` with a `recv()` that treats `EOFError` as Hub loss and anything else as a message.
-- Live, backfill, and pipeline stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
+- Pipe EOF is the only signal of Hub loss for ingestion and processing, checked with a non-blocking `poll()` once per work cycle. It also serves the dashboard. It plays no role in stopping the TUI, which exits through its interface. Process sentinels report every child's exit regardless.
+- A worker's `poll()` observes only Hub-to-worker traffic, so its bare EOF check remains sound while the Hub sends no commands. The Hub must `recv()` worker telemetry and treat `EOFError` as child loss.
+- Ingestion and processing stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
 - The TUI stops by exiting through its own interface; the Hub detects that child loss and shuts down. The dashboard stops through `SIGTERM`/`SIGINT` without a handler, since it holds no in-flight state.
 - No request state is kept — commands are one-off and fire-and-forget, nothing to track or discard.
 - Only the Hub acquires `hub.lock` directly beneath the `platformdirs` runtime directory.
@@ -68,7 +70,7 @@ Current integration gap: the TUI's pipe carries no traffic — the Hub's supervi
 
 ### 4. `src/spex/services/live.py`
 
-Complete. `LiveService(ServiceProcess)` implements only `_run_cycle()`; the pipe-accept, EOF-poll, `SIGTERM`/`SIGINT` handling, and pipe-close-on-exit all come from the shared base class, confirmed reviewed there.
+Complete under the former topology and now transitional. `LiveService(ServiceProcess)` implements only `_run_cycle()`; its reviewed worker lifecycle transfers to the consolidated ingestion service.
 
 - [x] a. Accept the child pipe endpoint through process construction.
 - [x] b. Never send or receive an application message on it; the base class polls once per work cycle and treats EOF as a stop signal.
@@ -80,7 +82,7 @@ Complete. `LiveService(ServiceProcess)` implements only `_run_cycle()`; the pipe
 
 ### 5. `src/spex/services/backfill.py`
 
-Complete, same basis as step 4. `BackfillService(ServiceProcess)` is structurally identical to `LiveService`, only its `_run_cycle()` differs.
+Complete under the former topology and now transitional. `BackfillService(ServiceProcess)` is removed when Joshua consolidates ingestion; archive replay becomes the ingestion service's `replay` phase.
 
 - [x] a. Apply the reviewed live-service control structure to backfill.
 - [x] b. Drop the `paused` half of the state contract; the service is only running or stopped.
@@ -93,7 +95,7 @@ Complete, same basis as step 4. `BackfillService(ServiceProcess)` is structurall
 Complete, same basis as step 4.
 
 - [x] a. Extract the shared worker process and pipe/signal stop lifecycle into `src/spex/services/service.py`, with the pipe used only for EOF-based Hub-loss detection.
-- [x] b. Reduce live, backfill, and pipeline to concrete `ServiceProcess` subclasses.
+- [x] b. Reduce the former live, backfill, and pipeline scaffolds to concrete `ServiceProcess` subclasses.
 - [x] c. Make the pipeline scaffold compatible with Hub-owned process and pipe supervision.
 - [x] d. Preserve its validation-and-transformation responsibility.
 - [x] e. Add only the lifecycle behavior required by the walking skeleton.
@@ -121,7 +123,9 @@ Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()`
 - [x] f. No request ledger needed — the walking skeleton only sends one-off, fire-and-forget commands. `_handle_message` dispatches `start`/`stop` straight to `_spawn_service`/`_join_service` with no response and no `message_id` in use anywhere; nothing to track. Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
 - [x] g. Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] h. Preserve graceful join and forced-termination ownership.
-- [x] i. Review the file before continuing. `SERVICE_TYPES`/`ManagedService` including `tui` and `dashboard` is intentional — `_spawn_service` is the uniform spawn path for all five roles.
+- [x] i. Review the direct-pipe supervision mechanism. `_spawn_service` remains the uniform spawn path.
+- [ ] j. Replace the `live` and `backfill` registry roles with `ingestion` after Joshua creates the consolidated scaffold; retain `pipeline`, `tui`, and `dashboard`.
+- [ ] k. Drain ingestion and processing telemetry in the supervision loop and retain process sentinels as authoritative liveness.
 
 ### 9. `src/spex/services/tui.py`
 
@@ -154,6 +158,6 @@ These confirm the transport swap itself. Message traffic on the TUI's pipe is a 
 - [ ] a. Confirm every source module imports successfully.
 - [ ] b. Confirm the Hub acquires the single runtime lock.
 - [ ] c. Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe.
-- [ ] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for live, backfill, pipeline, and dashboard.
+- [ ] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for ingestion, processing, and dashboard.
 - [ ] e. Confirm application shutdown closes endpoints and joins every child.
 - [ ] f. Reconcile completed work with `docs/TODO.md`, design documents, and `CHANGELOG.md`.

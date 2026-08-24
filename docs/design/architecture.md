@@ -15,11 +15,11 @@ Spex uses progressive decomposition. This document defines system structure, own
 
 ## Problem statement
 
-Spex needs a controllable and observable pipeline that processes Bluesky Jetstream v2 data for operational monitoring, portfolio demonstration, personal retention, and analytical use. The system supports continuous live ingestion and historical backfills without coupling their lifecycles.
+Spex needs a controllable and observable pipeline that processes Bluesky Jetstream v2 data for operational monitoring, portfolio demonstration, personal retention, and analytical use. One ingestion lifecycle replays available history and then continues with live events.
 
 ## Goals
 
-- Process live and historical Jetstream data through explicit boundaries.
+- Process historical and live Jetstream data through one ordered ingestion boundary.
 - Preserve valid analytical data and rejected source records in DuckLake.
 - Control services and inspect health through a Textual interface connected to the orchestrator.
 - Present read-only analytical views through Streamlit.
@@ -32,7 +32,7 @@ Spex needs a controllable and observable pipeline that processes Bluesky Jetstre
 - Use Streamlit for operational control.
 - Use Textual for record-level exploration.
 - Require one process for every logical responsibility.
-- Couple backfill availability to live-ingestion availability.
+- Reimplement the Jetstream archive-to-live cutover outside the ATProto SDK.
 - Support alternate Jetstream hosts.
 - Ship captured-event replay as an end-user feature.
 
@@ -44,18 +44,16 @@ Spex needs a controllable and observable pipeline that processes Bluesky Jetstre
 │ Hub ────────────────────> Textual operational interface          │
 │        │ supervises and aggregates health                        │
 │        v                                                         │
-│ Live ingestion ──┐                                               │
-│                  ├──> Raw retention ──> Processing ──> DuckLake  │
-│ Backfill ────────┘                                      │        │
+│ Ingestion ────────────> Raw retention ──> Processing ──> DuckLake│
 │                                                         v        │
 │                                                    Streamlit     │
 └──────────────────────────────────────────────────────────────────┘
        ^                    ^
-       │ WebSocket          │ HTTP/XRPC archive
-       └──────────── Bluesky Jetstream ────────────
+       │ HTTP/XRPC replay and WebSocket live tail
+       └──────────── Bluesky Jetstream
 ```
 
-Live ingestion and backfill operate independently and write through one logical raw-retention boundary. Validation and transformation consume completed raw batches. Streamlit reads DuckLake without controlling the pipeline.
+The ingestion service has two phases: `replay` consumes the authenticated archive, and `live` follows the WebSocket stream after the SDK-managed cutover. Both phases write through one raw-retention boundary and one durable cursor. Validation and transformation consume completed raw batches. Streamlit reads DuckLake without controlling the pipeline.
 
 ## Process topology
 
@@ -63,12 +61,11 @@ Live ingestion and backfill operate independently and write through one logical 
 | --- | --- |
 | Hub | Main application entry point, orchestration, session ownership, IPC, supervision, configuration, ephemeral request state, logging, and aggregate health |
 | Textual | Terminal ownership, operator input, configuration views, and operational-health presentation |
-| Live | Current Jetstream ingestion |
-| Backfill | Historical Jetstream ingestion |
+| Ingestion | Jetstream archive replay, seamless transition, live subscription, cursor ownership, and raw writes |
 | Validation and transformation | Schema validation, normalization, and DuckLake loading |
 | Streamlit | Read-only analytical dashboard |
 
-The Hub is the orchestrator and main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting either ingestion process ensures that validation and transformation runs. Processing drains and stops after the final ingestion process stops.
+The Hub is the orchestrator and main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting ingestion ensures that validation and transformation runs. Processing drains and stops after ingestion stops.
 
 See [Process Control](process-control.md) for IPC, identity, supervision, locking, request tracking, and shutdown behavior.
 
@@ -81,8 +78,9 @@ Interface and control
 └── Streamlit ───────────────────> DuckLake read access
 
 Pipeline
-├── Live ingestion
-├── Historical backfill
+├── Ingestion
+│   ├── Replay phase
+│   └── Live phase
 └── Validation and transformation
           │
           v
@@ -119,6 +117,7 @@ The `spex` command launches the orchestrator, which creates child control pipes 
 
 - `uv tool install spex` installs the complete application on Linux and WSL.
 - `jetstream.us-east.bsky.network` provides live WebSocket events and authenticated HTTP/XRPC archives.
+- The ATProto Python SDK's `atproto_jetstream` package owns archive planning, decoding, cursor-based reconnects, and the replay-to-live cutover.
 - Textual provides the terminal interface.
 - The package console script provides the direct application entry point.
 - DuckLake provides the analytical data mart.

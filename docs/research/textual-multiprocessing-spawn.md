@@ -30,7 +30,7 @@ Python documents that `set_start_method()` belongs in the protected application 
 
 ## Conclusions
 
-The failure does not come from the live-service target or its arguments. It results from lazy POSIX resource-tracker startup while Textual captures standard error with an invalid file descriptor.
+The failure does not come from the worker target or its arguments. It results from lazy POSIX resource-tracker startup while Textual captures standard error with an invalid file descriptor.
 
 Calling `set_start_method("spawn", force=True)` inside the action does not correct the stream interaction and changes global multiprocessing state after the application is running. Spex uses one explicit spawn context in a dedicated main-process orchestrator. The orchestrator creates multiprocessing resources and child processes outside Textual's redirected standard streams, and Textual runs as an IPC spoke.
 

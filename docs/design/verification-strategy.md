@@ -6,13 +6,13 @@ This document defines the system-level verification approach. Component designs 
 
 ## Functional verification
 
-Functional tests cover component contracts, live reconnection, resumable backfill, schema outcomes, transformations, DuckLake writes, process lifecycle, and operator controls. End-to-end tests begin with captured Jetstream input and finish with analytical results and operational health.
+Functional tests cover component contracts, archive replay, the replay-to-live transition, live reconnection, schema outcomes, transformations, DuckLake writes, process lifecycle, and operator controls. End-to-end tests begin with captured Jetstream input and finish with analytical results and operational health.
 
-The walking-skeleton verification traces one live post and one backfilled post through their ingestion paths, shared decoding and text transformation, DuckLake persistence, and display in the Streamlit posts table and DID counts. The Textual view reports service health while both paths run.
+The walking-skeleton verification traces one replayed post and one live post through the same ingestion service, raw boundary, text transformation, DuckLake persistence, and Streamlit posts table and DID counts. Textual reports the ingestion service's `replay` or `live` phase.
 
 ## Recovery verification
 
-Recovery tests cover interrupted raw writes, checkpoint replay, duplicate delivery, out-of-order batches, unavailable processing, failed DuckLake commits, Hub-lock replacement, child pipe loss, and graceful and forced shutdown.
+Recovery tests cover interrupted raw writes, persisted-cursor replay, SDK seam and reconnect deduplication, downstream duplicate handling after crashes, unavailable processing, failed DuckLake commits, Hub-lock replacement, child pipe loss, and graceful and forced shutdown.
 
 ## Supported-environment verification
 
@@ -30,10 +30,10 @@ Development tooling replays captured Jetstream events at original or accelerated
 
 Local Markdown results remain in root-level, Git-ignored `benchmarks/`. Runs selected for publication generate reproducible Markdown summaries in `docs/benchmarks/`. Captured datasets remain outside Git. Versioned metadata records provenance and reproduction details.
 
-Stored-data tests provide controlled scale beyond the 100 Mbps development connection. Live-service tests verify protocol compatibility and network-bound end-to-end behavior.
+Stored-data tests provide controlled scale beyond the 100 Mbps development connection. Ingestion-service tests verify protocol compatibility and network-bound end-to-end behavior.
 
 ## Open questions
 
-- What performance targets define adequate live and bulk capacity?
+- What performance targets define adequate replay and live capacity?
 - What captured corpus represents each collection and important optional shape?
 - Which benchmark runs form the portfolio evidence set?

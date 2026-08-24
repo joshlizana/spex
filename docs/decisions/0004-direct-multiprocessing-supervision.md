@@ -4,7 +4,7 @@ Status: accepted
 
 ## Context and problem statement
 
-Spex needs to supervise five named child processes with role-specific state, IPC identities, readiness, health, graceful shutdown, and forced termination. These children are Textual, live ingestion, backfill, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
+Spex needs to supervise four named child processes with role-specific state, IPC identities, readiness, health, graceful shutdown, and forced termination. These children are Textual, ingestion, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
 
 ## Decision drivers
 

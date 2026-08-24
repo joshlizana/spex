@@ -29,7 +29,7 @@ Chosen option: **Use a direct package entry point into the application orchestra
 - The orchestrator owns child processes, control connections, and lifecycle state.
 - Textual owns terminal interaction and sends operator actions through IPC.
 - Typer is not a runtime dependency.
-- Spex defines no public ingestion, backfill, processing, dashboard, or status subcommands.
+- Spex defines no public ingestion, replay, processing, dashboard, or status subcommands.
 - A future command-line interface requires a new demonstrated product need and a separate decision.
 
 ### Confirmation

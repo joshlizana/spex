@@ -4,29 +4,21 @@ Research date: 2026-08-18
 
 ## Goal
 
-Identify the minimum additional runtime dependencies needed for the M0 live, backfill, DuckLake, and Streamlit path.
+Identify the minimum additional runtime dependencies needed for the M0 ingestion, DuckLake, and Streamlit path.
 
 ## Method
 
-Review the official client and product documentation against the walking skeleton's separate long-lived processes and deliberately limited behavior.
+Review the official client and product documentation against the walking skeleton's long-lived processes and deliberately limited behavior. The Jetstream selection below is superseded by the later discovery of `atproto_jetstream` in `atproto==0.0.71`.
 
 ## Evidence
 
-### Live WebSocket client
+### Jetstream ingestion client
 
-The `websockets` package provides synchronous and asyncio clients. The synchronous client supports context-managed connections, message iteration, bounded `recv()` waits, WebSocket ping and pong, connection-close exceptions, and direct receipt of UTF-8 JSON as bytes.
+The original walking-skeleton selection used `websockets` for live traffic and HTTPX for archive traffic. `atproto==0.0.71` now includes `atproto_jetstream`, which provides Jetstream v2 archive planning and decoding, synchronous and asynchronous replay, cursor tracking, reconnect deduplication, and the replay-to-live transition.
 
-The live worker is already isolated in its own process. A synchronous client keeps its first implementation linear. A bounded receive timeout allows the worker to observe control requests without adding an asyncio loop. Production reconnection and checkpoint hardening remain later work.
+One ingestion worker follows that combined lifecycle. Spex does not use `websockets` and HTTPX directly at the ingestion boundary or implement the replay plan itself.
 
-Recommended M0 dependency: `websockets`.
-
-### Backfill HTTP client
-
-HTTPX provides synchronous and asynchronous clients, request headers, status handling, timeouts, connection pooling, and streamed byte or line iteration. Streaming avoids loading an archive response into memory and supports the authenticated HTTP boundary.
-
-The backfill worker is also isolated in its own process, so the synchronous API is sufficient for M0.
-
-Recommended M0 dependency: `httpx`.
+Recommended M0 dependency: `atproto`, pinned to a release that contains `atproto_jetstream`.
 
 ### DuckLake
 
@@ -49,8 +41,7 @@ Recommended M0 dependency: `streamlit`.
 
 The recommended additions are:
 
-- `websockets` for synchronous live ingestion.
-- `httpx` for synchronous streamed backfill requests.
+- `atproto` for Jetstream v2 replay and live ingestion.
 - `streamlit` for the analytical child process.
 - `platformdirs` for M0 raw and DuckLake paths.
 
@@ -66,9 +57,7 @@ The project uses the `spawn` multiprocessing context on every supported platform
 
 ## Sources
 
-- [`websockets` synchronous client](https://websockets.readthedocs.io/en/stable/reference/sync/client.html)
-- [HTTPX quick start and streaming](https://www.python-httpx.org/quickstart/)
-- [HTTPX API](https://www.python-httpx.org/api/)
+- [`atproto` Python SDK](https://github.com/MarshalX/atproto)
 - [DuckDB DuckLake extension](https://duckdb.org/docs/current/core_extensions/ducklake)
 - [DuckLake introduction](https://ducklake.select/docs/stable/duckdb/introduction)
 - [Streamlit command-line interface](https://docs.streamlit.io/develop/api-reference/cli)
