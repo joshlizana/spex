@@ -159,7 +159,7 @@ The slice excludes persistent credential storage, complete collection coverage, 
 ### 8. Deliver operational visibility
 
 - [ ] Connect the Textual interface to configuration and aggregate health without service-lifecycle controls.
-- [ ] Add retention, cleanup-interval, raw-capacity, and credential configuration workflows.
+- [ ] Add next-start retention, cleanup-interval, raw-capacity, and credential configuration workflows.
 - [ ] Add persistent warnings, degraded states, manual retries, and rejection counts.
 - [ ] Verify shutdown, replacement startup, worker recovery, and configuration persistence.
 
@@ -332,8 +332,8 @@ This phase is a research gate for ingestion and downstream batch processing.
 - [ ] Define the TUI information architecture, configuration workflow, and health presentation.
 - [ ] Define how the TUI obtains service state and metrics.
 - [ ] Define retained rejection counts and cleanup-failure details.
-- [ ] Define the retention-setting workflow and validation.
-- [ ] Define retention-increase replay offers and retention-decrease data-loss confirmation.
+- [ ] Define the next-start retention-setting workflow and validation.
+- [ ] Define next-start retention-increase replay offers and retention-decrease data-loss confirmation.
 - [ ] Define raw-capacity configuration and available-disk display.
 - [ ] Define credential setup and replay unlock workflows.
 - [ ] Define persistent and acknowledgment-cleared warnings.

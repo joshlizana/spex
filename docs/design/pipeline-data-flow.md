@@ -74,11 +74,11 @@ Successful insertion into either mutation history or rejected-record storage con
 
 Startup and scheduled cleanup remove expired valid and rejected records. The schedule defaults to hourly and is configurable. Cleanup runs outside insertion. Failures use standard retries; exhaustion leaves a visible degraded state until a later cleanup succeeds. The TUI offers manual retry.
 
-Retention has no configured maximum. A reduction warns about immediate data loss and requires confirmation. An increase offers replay for the newly included period and still applies when declined. The interface warns that Jetstream archive availability varies.
+Retention has no configured maximum. A reduction warns that the next start may delete newly expired data and requires confirmation before persistence. An increase offers replay for the newly included period on the next start and still persists when replay is declined. The interface warns that Jetstream archive availability varies.
 
 ## Operational surface
 
-The TUI exposes service state, throughput, lag, errors, available disk space, and retained rejection counts grouped by validation and transformation failure. It configures retention, cleanup interval, and absolute raw capacity. These settings persist through `platformdirs` configuration paths.
+The TUI exposes service state, throughput, lag, errors, available disk space, and retained rejection counts grouped by validation and transformation failure. It configures retention, cleanup interval, and absolute raw capacity. These settings persist through `platformdirs` configuration paths and apply when the next Spex session starts. Running services use the configuration snapshot loaded for their complete session; Spex does not extend or reduce retention, change cleanup scheduling, or resize raw capacity in flight.
 
 The TUI provides configuration and operational health only. Streamlit provides record-level analytical exploration through read-only DuckLake access.
 

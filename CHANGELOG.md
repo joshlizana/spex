@@ -37,6 +37,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Add a Hub ready/error handshake so Textual reports startup failure before entering its event loop.
 - Start ingestion, processing, and dashboard automatically before the Hub reports readiness.
 - Define change-driven service state and 250-millisecond role-keyed telemetry between workers, the Hub, and Textual.
+- Apply persisted configuration changes, including retention changes, on the next application start.
 
 ### Changed
 
