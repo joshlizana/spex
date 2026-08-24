@@ -111,7 +111,7 @@ Complete. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [x] d. Align comments and docstrings with scaffold behavior.
 - [x] e. Review the file before continuing.
 
-Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()` currently blocks in a placeholder sleep loop and never reads the pipe, so Hub loss is not yet detected. The real dashboard body has to consult the pipe for EOF.
+`run()` monitors the pipe from a daemon thread while the placeholder dashboard body remains active. A spawned-process probe confirms that closing the Hub endpoint produces EOF and the dashboard exits cleanly with code zero.
 
 ### 8. `src/spex/services/hub.py`
 
@@ -155,9 +155,10 @@ What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.
 
 These confirm the transport swap itself. Message traffic on the TUI's pipe is a feature, verified under `docs/TODO.md` 0.2.
 
-- [ ] a. Confirm every source module imports successfully.
-- [ ] b. Confirm the Hub acquires the single runtime lock.
+- [x] a. Confirm every source module imports successfully. All ten source modules compile and import under the project environment.
+- [x] b. Confirm the Hub acquires the single runtime lock. A temporary-path probe acquired the lock, rejected a second owner, and released it.
 - [ ] c. Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe.
 - [ ] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for ingestion, processing, and dashboard.
+  Dashboard EOF behavior is verified with a spawned-process probe; ingestion, processing, and the complete sentinel path remain to verify.
 - [ ] e. Confirm application shutdown closes endpoints and joins every child.
 - [ ] f. Reconcile completed work with `docs/TODO.md`, design documents, and `CHANGELOG.md`.

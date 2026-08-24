@@ -16,8 +16,8 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 - The bare `spex` entry point bootstraps the filesystem, enters the Hub's async context, and runs supervision on one event loop.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
 - `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, EOF-poll, and signal lifecycle.
-- `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. The TUI monitors its pipe from a daemon thread and exits through Textual's thread-safe boundary on EOF. Neither installs a signal handler. `DashboardService.run()` currently blocks in a placeholder sleep loop pending its real body in `docs/TODO.md` 0.7.
-- The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages, and the placeholder `run()` does not read it yet.
+- `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. Each monitors its pipe from a daemon thread. The TUI exits through Textual's thread-safe boundary on EOF; the dashboard sets its shutdown flag. Neither installs a signal handler. `DashboardService.run()` currently keeps a placeholder loop pending its real body in `docs/TODO.md` 0.7.
+- The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages.
 - Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers poll their pipe once per work cycle to detect Hub loss through EOF.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
 - `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy. The four child roles are `ingest`, `pipeline`, `tui`, and `dashboard`.
@@ -70,9 +70,10 @@ Remaining refactor sequence:
 ## Verification status
 
 - Source compilation succeeds with `python -m compileall -q src/spex`.
+- All ten source modules import successfully under the project environment.
+- A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
-- Behavioral multiprocessing, IPC, shutdown, and Textual integration tests remain pending.
-- The changes described above are committed and pushed to the GitHub remote; the worktree is clean.
+- Step 12c through 12e multiprocessing, IPC, shutdown, and Textual integration checks remain pending. A spawned-process probe confirms dashboard Hub-loss detection: closing the Hub endpoint produces EOF and the dashboard exits with code zero.
 
 ## Primary references
 
