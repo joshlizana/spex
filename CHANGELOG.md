@@ -43,7 +43,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Replace the separate live and backfill scaffolds with `IngestionService` under the `ingest` Hub role.
 - Consolidate raw storage under one `raw/` directory and remove the unused checkpoint-state directory.
 - Clarify that Textual disables terminal `SIGINT` generation, leaving Ctrl-C as an ignored input byte unless Spex binds it.
-- Reduce services to a signal-based stop and detect Hub loss by polling the child pipe between work cycles.
+- Reduce services to a signal-based stop and detect Hub loss from a daemon pipe-monitor thread.
 - Supervise child processes from an `asyncio` loop in the Hub, joining every child concurrently off the event loop.
 - Give the TUI and dashboard their own spawned-process classes, since neither has a bounded work cycle to poll between.
 - Record shutdown requests in the Hub's signal handler and join services after the supervision loop exits.

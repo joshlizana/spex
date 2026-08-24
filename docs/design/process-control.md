@@ -12,7 +12,7 @@ The orchestrator creates Textual and every named service child with `multiproces
 
 The orchestrator creates one duplex control pipe before spawning each child and passes one endpoint to it, retaining the other under its known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through this pipe.
 
-Ingestion and processing never receive an application command on their pipe. They send advisory state and health telemetry to the Hub and detect Hub loss through EOF; the orchestrator retains authoritative lifecycle state in its process registry and stops a worker directly with `process.terminate()`.
+Ingestion and processing never receive an application command on their pipe. They send advisory state and health telemetry to the Hub and detect Hub loss through EOF from a daemon monitor thread; the orchestrator retains authoritative lifecycle state in its process registry and stops a worker directly with `process.terminate()`.
 
 The TUI and the dashboard are long-lived processes with no bounded work cycle — the TUI blocks inside Textual's own event loop, and the dashboard has no cycle either. Neither can poll its pipe between cycles the way the workers do, so each uses a daemon monitor thread. The TUI needs an explicit `SIGTERM` handler that commands the app to exit directly, since it owns the terminal and an unhandled kill would leave it in a bad state. Textual's Linux driver clears `ISIG`, so Ctrl-C arrives as the input byte `\x03` and is ignored unless Spex binds it; no `SIGINT` reaches the TUI, Hub, or other foreground processes. The dashboard needs no signal handler because it is a read-only display with no in-flight state to protect. Its pipe carries Hub-loss detection and no application messages.
 
@@ -36,7 +36,7 @@ The Hub identifies each service through the role, process handle, and pipe endpo
 
 The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` for each child from the application `spawn` context. The orchestrator and child close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted child receives a new pipe.
 
-The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes. Ingestion and processing send advisory telemetry but receive no application commands. Each worker checks its connection with a non-blocking `poll()` once per work cycle to detect Hub loss because the Hub sends nothing on that endpoint.
+The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes. Ingestion and processing send advisory telemetry but receive no application commands. Each worker monitors its connection from a daemon thread to detect Hub loss because the Hub sends nothing on that endpoint.
 
 Every message contains a `type` and `payload`. A message includes a `message_id` when it belongs to a request-response exchange. Role identity remains connection context rather than a repeated message field. The initial state reports the protocol version once during readiness.
 
@@ -92,11 +92,11 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. That termination reaches only the old Hub's specific PID, not its children — POSIX does not propagate a killed parent's signal to them. Closing the old Hub's pipe endpoints as it dies causes every child to see EOF. Ingestion and processing exit between bounded work cycles, while the TUI and dashboard detect it from their monitor threads. Ctrl-C does not provide a process-group fallback while Textual has disabled `ISIG`; it is an ignored input byte unless Spex binds it. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
+A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. That termination reaches only the old Hub's specific PID, not its children — POSIX does not propagate a killed parent's signal to them. Closing the old Hub's pipe endpoints as it dies causes every child to see EOF through its monitor thread. Ctrl-C does not provide a process-group fallback while Textual has disabled `ISIG`; it is an ignored input byte unless Spex binds it. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
 
 ## Application shutdown
 
-Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every child — ingestion, processing, the TUI, and dashboard — with `SIGTERM`, joins each, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure is visible to every child through pipe EOF. Workers check between bounded cycles, while the TUI and dashboard use their monitor threads.
+Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every child — ingestion, processing, the TUI, and dashboard — with `SIGTERM`, joins each, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure is visible to every child through pipe EOF from its monitor thread.
 
 ## Standard retry policy
 

@@ -10,7 +10,7 @@ Steps 1 through 11 contain the completed direct-pipe work. Joshua has consolidat
 
 The target topology has one `ingest` service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity.
 
-The consolidated ingestion and processing workers implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection between bounded work cycles.
+The consolidated ingestion and processing workers implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection from a daemon monitor thread.
 
 TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `Spex.exit()` covers only the abnormal path — an external kill of the Hub or a supervisor exception, where `_join()` would otherwise terminate the TUI unhandled and leave the terminal in raw mode — and is tracked in `docs/TODO.md` 0.2 as implementation rather than refactor scope. The TUI is still the one genuine two-way exception for messaging: it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic.
 
@@ -24,8 +24,8 @@ The TUI monitors its child endpoint from a daemon thread. Pipe EOF crosses Textu
 - The Hub creates a duplex `multiprocessing.Pipe` for every child and passes one endpoint during spawn.
 - The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Ingestion and processing send advisory telemetry, including ingestion's phase, but receive no commands. Dashboard sends no messages.
 - Pipe ownership supplies service identity for every child. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges — only the TUI ever sends one.
-- Pipe EOF is the only signal of Hub loss for ingestion and processing, checked with a non-blocking `poll()` once per work cycle. It also serves the dashboard. The TUI's monitor thread exits Textual on EOF. Process sentinels report every child's exit regardless.
-- A worker's `poll()` observes only Hub-to-worker traffic, so its bare EOF check remains sound while the Hub sends no commands. The Hub must `recv()` worker telemetry and treat `EOFError` as child loss.
+- Pipe EOF is the only signal of Hub loss for ingestion and processing, checked from a daemon monitor thread. It also serves the dashboard. The TUI's monitor thread exits Textual on EOF. Process sentinels report every child's exit regardless.
+- A worker's monitor observes only Hub-to-worker traffic, so receiving after `poll()` remains sound while the Hub sends no commands. The Hub must `recv()` worker telemetry and treat `EOFError` as child loss once telemetry exists.
 - Ingestion and processing stop, when the Hub is alive and initiates it, through a shared `ServiceProcess` `SIGTERM` handler that ends the current work cycle gracefully; the Hub triggers it with `process.terminate()`, not a pipe message.
 - The TUI stops by exiting through its own interface; the Hub detects that child loss and shuts down. The dashboard stops through `SIGTERM`/`SIGINT` without a handler, since it holds no in-flight state.
 - No request state is kept — commands are one-off and fire-and-forget, nothing to track or discard.
@@ -73,7 +73,7 @@ The TUI monitors its pipe for Hub loss but sends no operator traffic yet. What t
 Historical step, complete. The reviewed `LiveService` worker lifecycle now belongs to `IngestionService`; `live.py` is removed.
 
 - [x] a. Accept the child pipe endpoint through process construction.
-- [x] b. Never send or receive an application message on it; the base class polls once per work cycle and treats EOF as a stop signal.
+- [x] b. Never send or receive an application command on it; the base class monitors the pipe from a daemon thread and treats EOF as a stop signal.
 - [x] c. Rely on the shared `ServiceProcess` signal handler for operator-initiated stop; no control-message handling.
 - [x] d. Drop the `paused` half of the state contract; the service is only running or stopped.
 - [x] e. Close the pipe during every exit path.
@@ -157,8 +157,7 @@ These confirm the transport swap itself. Message traffic on the TUI's pipe is a 
 
 - [x] a. Confirm every source module imports successfully. All ten source modules compile and import under the project environment.
 - [x] b. Confirm the Hub acquires the single runtime lock. A temporary-path probe acquired the lock, rejected a second owner, and released it.
-- [ ] c. Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe.
-- [ ] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for ingestion, processing, and dashboard.
-  Dashboard EOF behavior is verified with a spawned-process probe; ingestion, processing, and the complete sentinel path remain to verify.
+- [ ] c. Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe. Ingestion, pipeline, and dashboard pass with three distinct endpoints. Textual fails during driver initialization because `multiprocessing` spawn closes the child standard-input stream; `sys.__stdin__.fileno()` raises `ValueError`.
+- [x] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for ingestion, processing, and dashboard. Spawned probes verify clean EOF exit and readable sentinels for both workers and dashboard; the real Hub run observes the failed TUI child and shuts down.
 - [ ] e. Confirm application shutdown closes endpoints and joins every child.
 - [ ] f. Reconcile completed work with `docs/TODO.md`, design documents, and `CHANGELOG.md`.

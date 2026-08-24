@@ -31,6 +31,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Create a dedicated duplex control pipe before spawning each child.
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [ ] Spawn Textual as a non-daemonic IPC spoke with inherited terminal streams.
+  Blocked: a real `spex` PTY run confirms that Python's spawned multiprocessing child closes standard input, and Textual fails when its Linux driver calls `sys.__stdin__.fileno()`.
 - [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Define the walking-skeleton service transitions.

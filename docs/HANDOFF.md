@@ -15,10 +15,10 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 - The Hub runs in the main process under an explicit multiprocessing `spawn` context.
 - The bare `spex` entry point bootstraps the filesystem, enters the Hub's async context, and runs supervision on one event loop.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
-- `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, EOF-poll, and signal lifecycle.
+- `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, daemon EOF-monitor thread, and signal lifecycle.
 - `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. Each monitors its pipe from a daemon thread. The TUI exits through Textual's thread-safe boundary on EOF; the dashboard sets its shutdown flag. Neither installs a signal handler. `DashboardService.run()` currently keeps a placeholder loop pending its real body in `docs/TODO.md` 0.7.
 - The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages.
-- Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers poll their pipe once per work cycle to detect Hub loss through EOF.
+- Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers monitor their pipe from a daemon thread to detect Hub loss through EOF.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
 - `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy. The four child roles are `ingest`, `pipeline`, `tui`, and `dashboard`.
 - The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass branches on role: the TUI's pipe is polled and received, driving `_handle_message`; workers are checked by process sentinel only. TUI loss ends the loop through pipe EOF or a dead sentinel; worker loss is joined and dropped without stopping the Hub. Every blocking join runs through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`), so `__aexit__` awaits `_join` before releasing the lock.
@@ -48,9 +48,7 @@ TUI and dashboard are long-lived, non-cyclic processes (`SpexProcess` blocks ins
 
 Remaining gap on the abnormal path: `Hub._join()` terminates every service including the TUI, so an external kill of the Hub or a supervisor exception sends the TUI an unhandled `SIGTERM` and leaves the terminal in raw mode with the alternate screen active. Tracked in `docs/TODO.md` 0.2 as TUI `SIGTERM` handling, by Joshua's decision that it is implementation rather than refactor scope. The same reasoning covers the PID-targeted-kill case, which orphans children because POSIX does not propagate a killed parent's signal.
 
-One open design thread remains:
-
-1. Once ingestion or processing gets real two-way messages, message handling likely needs its own thread there too: inline handling only checks the pipe between `_run_cycle()` calls, so a slow cycle delays response to anything arriving mid-cycle. This is close to `ServiceProcess`'s earlier shape (`_receive_thread` + `_send_lock`), removed only because there was nothing to receive yet. Bringing real messaging back likely means bringing at least the send lock back, since concurrent `.send()` calls on one `Connection` need serializing.
+Worker pipe monitoring now runs from a daemon thread, so Hub loss is detected during a work cycle. A send lock remains unnecessary until telemetry introduces concurrent sends.
 
 Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only — process, pipe, and signal supervision. What a service does with its pipe is implementation and lives in `docs/TODO.md`. Step 9 is now the TUI transport wiring (9b) and its review (9c); its operator intents, background-worker state receipt, real health indicator, and Textual-closure shutdown intent moved out, since `docs/TODO.md` 0.2 already covers all four. Step 12 keeps the mechanical confirmations and drops the bidirectional-message check as feature verification.
 
@@ -73,7 +71,7 @@ Remaining refactor sequence:
 - All ten source modules import successfully under the project environment.
 - A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
-- Step 12c through 12e multiprocessing, IPC, shutdown, and Textual integration checks remain pending. A spawned-process probe confirms dashboard Hub-loss detection: closing the Hub endpoint produces EOF and the dashboard exits with code zero.
+- Worker and dashboard integration passes: the Hub assigns three distinct pipes, closes and joins all three services, releases its lock, and each child detects Hub EOF with a readable sentinel and code-zero exit. The real `spex` PTY check exposes the remaining blocker: Python's spawned child has closed standard input, so Textual raises `ValueError` at `sys.__stdin__.fileno()` before mounting. The Hub observes that exit, cleans up, and returns code zero.
 
 ## Primary references
 
