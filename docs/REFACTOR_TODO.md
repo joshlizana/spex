@@ -16,7 +16,7 @@ TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic,
 
 Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. Spex currently has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
 
-The TUI monitors its child endpoint from a daemon thread. Pipe EOF crosses Textual's thread boundary with `call_from_thread()` and exits the application. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
+The TUI monitors its child endpoint from a daemon thread. Pipe EOF crosses Textual's thread boundary with `call_from_thread()` and exits the application. No request ledger is needed because the TUI exposes no service-lifecycle commands.
 
 ## Confirmed target
 
@@ -74,7 +74,7 @@ Historical step, complete. The reviewed `LiveService` worker lifecycle now belon
 
 - [x] a. Accept the child pipe endpoint through process construction.
 - [x] b. Never send or receive an application command on it; the base class monitors the pipe from a daemon thread and treats EOF as a stop signal.
-- [x] c. Rely on the shared `ServiceProcess` signal handler for operator-initiated stop; no control-message handling.
+- [x] c. Rely on the shared `ServiceProcess` signal handler for application shutdown; no worker control-message handling.
 - [x] d. Drop the `paused` half of the state contract; the service is only running or stopped.
 - [x] e. Close the pipe during every exit path.
 - [x] f. Align comments and docstrings with scaffold behavior.
@@ -119,8 +119,8 @@ Complete. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [x] b. Create one pipe pair before spawning each child.
 - [x] c. Pass the child endpoint during spawn and close unused endpoint copies.
 - [x] d. Store each parent endpoint with its role and process handle.
-- [x] e. Monitor every pipe endpoint and process sentinel without listener or handler threads. `run()` is an `asyncio` supervision loop: `loop.add_signal_handler` records shutdown intent, the TUI's pipe drives `_handle_message`, TUI loss ends the loop through pipe EOF or the process sentinel, and worker loss is joined without stopping the Hub. Blocking joins run through `asyncio.to_thread`, and `_join` escalates every child concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`).
-- [x] f. No request ledger needed — the walking skeleton only sends one-off, fire-and-forget commands. `_handle_message` dispatches `start`/`stop` straight to `_spawn_service`/`_join_service` with no response and no `message_id` in use anywhere; nothing to track. Full ledger design deferred in `process-control.md` until a correlated response is actually needed.
+- [x] e. Monitor every pipe endpoint and process sentinel without listener or handler threads. `run()` is an `asyncio` supervision loop: `loop.add_signal_handler` records shutdown intent, TUI EOF ends supervision, and worker loss is joined without stopping the Hub. Blocking joins run through `asyncio.to_thread`, and `_join` escalates every child concurrently with `asyncio.gather`.
+- [x] f. Require no request ledger because the TUI exposes no service-lifecycle commands.
 - [x] g. Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] h. Preserve graceful join and forced-termination ownership.
 - [x] i. Review the direct-pipe supervision mechanism. `_spawn_service` remains the uniform spawn path.
@@ -133,7 +133,7 @@ Complete. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 - [x] b. Create and retain the Hub process and TUI-Hub pipe. A daemon thread monitors Hub EOF and crosses Textual's thread-safe boundary with `call_from_thread()`.
 - [x] c. Review the file before continuing. Normal and exceptional Textual exit stop and join the monitor, close the pipe, and join the Hub; partial process and thread startup clean up only acquired resources.
 
-What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.2: sending operator intents, receiving state across Textual's thread-safe boundary, showing real child and connection state in place of the placeholder health indicator, and reporting Hub startup failure. This step covers only the transport wiring.
+What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.2: receiving state across Textual's thread-safe boundary, showing real child and connection state in place of the placeholder health indicator, and reporting Hub startup failure. This step covers only the transport wiring.
 
 ### 10. `src/spex/__init__.py`
 

@@ -34,10 +34,9 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
 - [ ] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
-- [ ] Define the walking-skeleton service transitions.
-- [ ] Add a Textual control for starting and stopping ingestion.
+- [ ] Start ingestion, processing, and dashboard automatically after Hub readiness and configuration validation.
 - [ ] Show ingestion's `replay` or `live` phase.
-- [ ] Start validation and transformation automatically with ingestion.
+- [ ] Keep validation and transformation active for the application lifetime with ingestion.
 - [x] Launch the Hub and every operational child with `multiprocessing.Process` and retain each process handle at its ownership boundary.
 - [x] Monitor Hub-owned child pipe endpoints independently of Textual.
 - [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
@@ -116,7 +115,6 @@ The slice excludes persistent credential storage, complete collection coverage, 
 - [ ] Generalize skeletal child launch into reusable worker supervision.
 - [ ] Harden duplex-pipe ownership, closure, and concurrent-send behavior.
 - [ ] Complete readiness, shutdown, restart, and pipe-loss flows.
-- [ ] Track command state in the ephemeral session request ledger.
 - [ ] Verify the complete worker lifecycle before adding pipeline behavior.
 
 ### 3. Establish reproducible pipeline input
@@ -156,9 +154,9 @@ The slice excludes persistent credential storage, complete collection coverage, 
 - [ ] Connect authenticated replay to the ingestion service.
 - [ ] Verify archive replay and the transition to live through one cursor and raw writer.
 
-### 8. Deliver operational control
+### 8. Deliver operational visibility
 
-- [ ] Connect the Textual interface to service lifecycle controls and aggregate health.
+- [ ] Connect the Textual interface to configuration and aggregate health without service-lifecycle controls.
 - [ ] Add retention, cleanup-interval, raw-capacity, and credential configuration workflows.
 - [ ] Add persistent warnings, degraded states, manual retries, and rejection counts.
 - [ ] Verify shutdown, replacement startup, worker recovery, and configuration persistence.
@@ -234,10 +232,9 @@ Resolve these items when their roadmap increment becomes active.
 ### Process lifecycle
 
 - [ ] Define process readiness and shutdown behavior.
-- [ ] Define the TUI control for starting and stopping ingestion.
-- [ ] Test automatic validation-and-transformation startup with ingestion.
+- [ ] Test automatic ingestion, validation-and-transformation, and dashboard startup.
 - [ ] Test graceful child shutdown after main-process loss.
-- [ ] Test worker restart exhaustion, degraded health, and manual restart.
+- [ ] Test worker restart exhaustion and degraded health.
 
 ### IPC transport and protocol
 
@@ -248,20 +245,8 @@ Resolve these items when their roadmap increment becomes active.
 - [ ] Define and test initial-state validation and readiness transition.
 - [ ] Test connection-bound service identity, health display, and log correlation.
 - [ ] Test one pipe per process instance and fresh-pipe creation on restart.
-- [ ] Test pipe loss, degraded status, and manual service restart.
+- [ ] Test pipe loss and degraded status.
 - [ ] Review pickle trust and the absence of an IPC message-size limit if the inherited-pipe boundary changes.
-
-### Command lifecycle and ephemeral request ledger
-
-- [ ] Define command response schemas and allowed request states.
-- [ ] Finalize manual retry identity behavior during IPC implementation.
-- [ ] Define the in-memory entry structure for message ID, status, creation time, and last-update time.
-- [ ] Test recording a request before dispatch and updating its current status.
-- [ ] Test idempotent duplicate-request handling.
-- [ ] Test late acceptance, completion, and failure reconciliation for unknown requests.
-- [ ] Test direct manual retry after ledger expiration.
-- [ ] Test one-hour entry expiration and complete disposal on Hub exit.
-- [ ] Profile command completion durations and select command-specific timeouts.
 
 ## 3. Test-data and profiling foundation
 
@@ -342,7 +327,7 @@ This phase is a research gate for ingestion and downstream batch processing.
 
 ## 9. Textual operational interface
 
-- [ ] Define the TUI information architecture and control workflow.
+- [ ] Define the TUI information architecture, configuration workflow, and health presentation.
 - [ ] Define how the TUI obtains service state and metrics.
 - [ ] Define retained rejection counts and cleanup-failure details.
 - [ ] Define the retention-setting workflow and validation.

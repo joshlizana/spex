@@ -30,7 +30,7 @@ The `replay` phase consumes the sealed archive and includes all work before the 
 
 - Spex runs Textual in the main process, a Hub child, and Hub-owned ingestion, processing, and Streamlit children.
 - Ingestion owns one raw writer, one durable sequence cursor, and one service-state artifact.
-- The TUI starts and stops ingestion and reports its `replay` or `live` phase.
+- The Hub starts ingestion with the application, while the TUI reports its `replay` or `live` phase.
 - Ingestion sends phase and health telemetry to the Hub while lifecycle commands remain signal-based.
 - `atproto_jetstream.replay()` owns archive planning, decoding, and the gapless transition.
 - The SDK drops sequence values at or below its in-memory cursor at the replay/live seam and during reconnects.

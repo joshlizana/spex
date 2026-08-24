@@ -9,7 +9,7 @@ Spex uses a dedicated orchestrator with Textual as its operational interface and
 ## Decision drivers
 
 - `spex` launches one interactive application.
-- The Textual interface owns operator controls and configuration.
+- The Textual interface owns configuration and operational-health presentation.
 - The main-process Textual interface launches the Hub without an argument parser.
 - Spex does not require structured headless commands, shell completion, or command-specific option validation.
 

@@ -21,7 +21,7 @@ Spex needs a controllable and observable pipeline that processes Bluesky Jetstre
 
 - Process historical and live Jetstream data through one ordered ingestion boundary.
 - Preserve valid analytical data and rejected source records in DuckLake.
-- Control services and inspect health through a Textual interface connected to the orchestrator.
+- Configure the application and inspect health through a Textual interface connected to the orchestrator.
 - Present read-only analytical views through Streamlit.
 - Package every component as one Linux application that also runs under WSL.
 - Use multiple processes for isolation and parallel execution.
@@ -65,7 +65,7 @@ The ingestion service has two phases: `replay` consumes the authenticated archiv
 | Validation and transformation | Schema validation, normalization, and DuckLake loading |
 | Streamlit | Read-only analytical dashboard |
 
-Textual runs in the main process and owns the Hub process handle. The Hub owns the remaining service children. Loss of either Textual or the Hub ends the application session through their pipe. An operational child failure degrades only the capability it owns. Starting ingestion ensures that validation and transformation runs. Processing drains and stops after ingestion stops.
+Textual runs in the main process and owns the Hub process handle. The Hub owns the remaining service children and starts ingestion, processing, and dashboard with the application. Loss of either Textual or the Hub ends the application session through their pipe. An operational child failure degrades only the capability it owns.
 
 See [Process Control](process-control.md) for IPC, identity, supervision, locking, request tracking, and shutdown behavior.
 
@@ -111,7 +111,7 @@ See [Pipeline and Data Flow](pipeline-data-flow.md) for ingestion, raw retention
 
 The Hub is the application orchestrator and control plane. Textual runs in the main process as its terminal-facing control and operational-health interface. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
 
-The `spex` command launches Textual, which creates a control pipe and spawns the Hub. The Hub creates control pipes and spawns the operational services. TUI actions request service transitions through IPC. Closing the TUI closes the Hub pipe, causing complete application shutdown.
+The `spex` command launches Textual, which creates a pipe and spawns the Hub. The Hub creates pipes and starts every operational service. The TUI receives state and health through IPC but exposes no service-lifecycle controls. Closing the TUI closes the Hub pipe, causing complete application shutdown.
 
 ## Deployment and dependencies
 

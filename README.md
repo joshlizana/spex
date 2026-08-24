@@ -16,7 +16,7 @@ The primary use case demonstrates an architecture that handles real-time streams
 
 ## Interfaces
 
-- A Textual terminal user interface sends operator commands, accepts and persists the Jetstream archive credential, and displays operational health.
+- A Textual terminal user interface accepts and persists configuration and displays operational health.
 - The main-process Textual interface owns the terminal and the Hub process handle. The Hub owns orchestration, IPC, application state, and operational-service shutdown.
 - A Streamlit dashboard presents analytical views backed by the data mart.
 

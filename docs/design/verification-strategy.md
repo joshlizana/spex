@@ -6,7 +6,7 @@ This document defines the system-level verification approach. Component designs 
 
 ## Functional verification
 
-Functional tests cover component contracts, archive replay, the replay-to-live transition, live reconnection, schema outcomes, transformations, DuckLake writes, process lifecycle, and operator controls. End-to-end tests begin with captured Jetstream input and finish with analytical results and operational health.
+Functional tests cover component contracts, archive replay, the replay-to-live transition, live reconnection, schema outcomes, transformations, DuckLake writes, automatic process lifecycle, and operational health. End-to-end tests begin with captured Jetstream input and finish with analytical results and operational health.
 
 The walking-skeleton verification traces one replayed post and one live post through the same ingestion service, raw boundary, text transformation, DuckLake persistence, and Streamlit posts table and DID counts. Textual reports the ingestion service's `replay` or `live` phase.
 
