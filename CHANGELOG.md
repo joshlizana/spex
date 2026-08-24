@@ -48,6 +48,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Give the TUI and dashboard their own spawned-process classes, since neither has a bounded work cycle to poll between.
 - Record shutdown requests in the Hub's signal handler and join services after the supervision loop exits.
 - Exit the TUI through its own interface and let the Hub read that child loss as its shutdown trigger.
+- Monitor the TUI's Hub pipe from a background thread and exit Textual through its thread-safe boundary on pipe loss.
 - Refactor the live-service scaffold to receive native control dictionaries through its Hub-created pipe and exit on pipe loss.
 - Apply the reviewed pipe-control lifecycle to the backfill-service scaffold.
 - Extract the shared worker lifecycle into `ServiceProcess` and reduce live, backfill, and pipeline to bounded-work subclasses.

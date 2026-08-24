@@ -1,4 +1,5 @@
 import random
+import threading
 
 from multiprocessing import connection, get_context
 
@@ -15,15 +16,33 @@ class SpexProcess(SpawnProcess):
     def __init__(self, pipe: connection.Connection):
         super().__init__()
         self._pipe: connection.Connection = pipe
-        self._shutdown: bool = False
+        self._app: Spex | None = None
+        self._shutdown = False
 
-    def run(self):
+    def run(self) -> None:
         """Run the Spex TUI until it exits, releasing the Hub pipe afterward."""
+        self._app = Spex()
+        pipe_thread = threading.Thread(target=self.pipe, daemon=True)
         try:
-            app = Spex()
-            app.run()
+            pipe_thread.start()
+            try:
+                self._app.run()
+            finally:
+                self._shutdown = True
+                pipe_thread.join()
         finally:
             self._pipe.close()
+
+    def pipe(self) -> None:
+        """Monitor the Spex TUI control-plane pipe."""
+        while not self._shutdown:
+            try:
+                if self._pipe.poll(timeout=0.1):
+                    message = self._pipe.recv()
+                    # message handling logic would go here
+            except (EOFError, OSError):
+                self._shutdown = True
+                self._app.call_from_thread(self._app.exit)
 
 
 class StatusCircle(Static):

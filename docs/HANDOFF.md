@@ -6,7 +6,7 @@ This document provides the current working context for the next agent. [`AGENTS.
 
 ## Current objective
 
-Complete TUI pipe wiring and entry-point integration on the consolidated ingestion architecture.
+Complete entry-point integration on the consolidated ingestion architecture.
 
 The ingestion service has exactly two phases: `replay` and `live`. The ATProto Python SDK's `atproto_jetstream.replay()` owns archive planning, decoding, cursor-based seam deduplication, and the transition to the WebSocket tail. Replay and live share one process, raw writer, durable cursor, and state artifact.
 
@@ -15,7 +15,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 - The Hub runs in the main process under an explicit multiprocessing `spawn` context.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
 - `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, EOF-poll, and signal lifecycle.
-- `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. Neither installs a signal handler. `DashboardService.run()` currently blocks in a placeholder sleep loop pending its real body in `docs/TODO.md` 0.7.
+- `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. The TUI monitors its pipe from a daemon thread and exits through Textual's thread-safe boundary on EOF. Neither installs a signal handler. `DashboardService.run()` currently blocks in a placeholder sleep loop pending its real body in `docs/TODO.md` 0.7.
 - The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages, and the placeholder `run()` does not read it yet.
 - Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers poll their pipe once per work cycle to detect Hub loss through EOF.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
@@ -26,7 +26,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 ## Resume point
 
-Joshua created [`src/spex/services/ingest.py`](../src/spex/services/ingest.py), removed the former live and backfill modules, updated the Hub registry to the `ingest` role, and consolidated raw storage under `raw/`. Continue [`src/spex/services/tui.py`](../src/spex/services/tui.py) at 9b: pass the TUI's child pipe endpoint through to the `Spex` app and wire it functionally. The Hub's `asyncio` supervision mechanism remains reviewed. No request ledger is needed for the walking skeleton.
+TUI transport steps 9b and 9c are complete. `SpexProcess` monitors the Hub pipe from a daemon thread, exits Textual through `call_from_thread()` on EOF, and orders shutdown so the thread stops before the pipe closes. Continue at step 10 in [`src/spex/__init__.py`](../src/spex/__init__.py): bootstrap the filesystem and run the Hub in the main process. No request ledger is needed for the walking skeleton.
 
 Hub review findings, all resolved this session except (1):
 
@@ -47,18 +47,16 @@ TUI and dashboard are long-lived, non-cyclic processes (`SpexProcess` blocks ins
 
 Remaining gap on the abnormal path: `Hub._join()` terminates every service including the TUI, so an external kill of the Hub or a supervisor exception sends the TUI an unhandled `SIGTERM` and leaves the terminal in raw mode with the alternate screen active. Tracked in `docs/TODO.md` 0.2 as TUI `SIGTERM` handling, by Joshua's decision that it is implementation rather than refactor scope. The same reasoning covers the PID-targeted-kill case, which orphans children because POSIX does not propagate a killed parent's signal.
 
-Two open design threads, discussed but not decided:
+One open design thread remains:
 
-1. A background thread blocked on `self._pipe.recv()` for TUI (and dashboard) would detect Hub loss without depending on any signal reaching the process — it fires on the OS closing the pipe regardless of cause, which also closes the abnormal-path and PID-targeted-kill gaps above. For the TUI this is not extra cost: it is the same background-worker thread step 9 already needs for real operator-intent/state traffic, so EOF detection comes free from the same `recv()` call. Textual requires crossing back to the main thread via `call_from_thread()`/`post_message()` to act on it, not calling `app.exit()` from that thread.
-2. Once ingestion or processing gets real two-way messages, message handling likely needs its own thread there too: inline handling only checks the pipe between `_run_cycle()` calls, so a slow cycle delays response to anything arriving mid-cycle. This is close to `ServiceProcess`'s earlier shape (`_receive_thread` + `_send_lock`), removed only because there was nothing to receive yet. Bringing real messaging back likely means bringing at least the send lock back, since concurrent `.send()` calls on one `Connection` need serializing.
+1. Once ingestion or processing gets real two-way messages, message handling likely needs its own thread there too: inline handling only checks the pipe between `_run_cycle()` calls, so a slow cycle delays response to anything arriving mid-cycle. This is close to `ServiceProcess`'s earlier shape (`_receive_thread` + `_send_lock`), removed only because there was nothing to receive yet. Bringing real messaging back likely means bringing at least the send lock back, since concurrent `.send()` calls on one `Connection` need serializing.
 
 Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only — process, pipe, and signal supervision. What a service does with its pipe is implementation and lives in `docs/TODO.md`. Step 9 is now the TUI transport wiring (9b) and its review (9c); its operator intents, background-worker state receipt, real health indicator, and Textual-closure shutdown intent moved out, since `docs/TODO.md` 0.2 already covers all four. Step 12 keeps the mechanical confirmations and drops the bidirectional-message check as feature verification.
 
 Remaining refactor sequence:
 
-1. Pass a child pipe to the Textual service and wire it functionally (9b), then review it (9c).
-2. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
-3. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
+1. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
+2. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
 
 ## Confirmed boundaries
 
