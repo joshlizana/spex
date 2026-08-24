@@ -19,14 +19,12 @@ def bootstrap_spex() -> None:
     # Create durable application-data boundaries.
     for subdirectory in [
         "raw",
-        "raw/live",
-        "raw/backfill",
         "ducklake",
         "rejected",
         "credentials",
     ]:
         (config.data_dir / subdirectory).mkdir(parents=True, exist_ok=True)
 
-    # Create checkpoint and service-state boundaries.
-    for subdirectory in ["checkpoints", "services"]:
+    # Create the service-state boundary.
+    for subdirectory in ["services"]:
         (config.state_dir / subdirectory).mkdir(parents=True, exist_ok=True)

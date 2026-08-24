@@ -45,7 +45,6 @@ user_config_path/
 └── config.json
 
 user_state_path/
-├── checkpoints/
 └── services/
 
 user_runtime_path/

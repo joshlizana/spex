@@ -40,6 +40,8 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Consolidate live ingestion and historical backfill into one ingestion service with `replay` and `live` phases.
 - Select `atproto_jetstream.replay()` to own Jetstream v2 archive planning, decoding, seam deduplication, and the transition to the live tail.
 - Reduce the target topology from five child services to four and use one raw writer, durable cursor, and ingestion state artifact.
+- Replace the separate live and backfill scaffolds with `IngestionService` under the `ingest` Hub role.
+- Consolidate raw storage under one `raw/` directory and remove the unused checkpoint-state directory.
 - Clarify that Textual disables terminal `SIGINT` generation, leaving Ctrl-C as an ignored input byte unless Spex binds it.
 - Reduce services to a signal-based stop and detect Hub loss by polling the child pipe between work cycles.
 - Supervise child processes from an `asyncio` loop in the Hub, joining every child concurrently off the event loop.

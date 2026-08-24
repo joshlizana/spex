@@ -6,7 +6,7 @@ This document provides the current working context for the next agent. [`AGENTS.
 
 ## Current objective
 
-Align the control-plane scaffold with the consolidated ingestion architecture, then complete TUI pipe wiring and entry-point integration. Joshua first replaces the separate live and backfill roles with one ingestion service.
+Complete TUI pipe wiring and entry-point integration on the consolidated ingestion architecture.
 
 The ingestion service has exactly two phases: `replay` and `live`. The ATProto Python SDK's `atproto_jetstream.replay()` owns archive planning, decoding, cursor-based seam deduplication, and the transition to the WebSocket tail. Replay and live share one process, raw writer, durable cursor, and state artifact.
 
@@ -14,19 +14,19 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 - The Hub runs in the main process under an explicit multiprocessing `spawn` context.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
-- Live, backfill, and pipeline currently inherit `ServiceProcess`. Their shared pipe, EOF-poll, and signal lifecycle is reviewed, but the live and backfill classes are transitional and must become one ingestion subclass.
+- `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, EOF-poll, and signal lifecycle.
 - `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. Neither installs a signal handler. `DashboardService.run()` currently blocks in a placeholder sleep loop pending its real body in `docs/TODO.md` 0.7.
 - The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages, and the placeholder `run()` does not read it yet.
 - Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers poll their pipe once per work cycle to detect Hub loss through EOF.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
-- `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy. Its current five-role registry is transitional; the target four child roles are `ingestion`, `pipeline`, `tui`, and `dashboard`.
+- `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy. The four child roles are `ingest`, `pipeline`, `tui`, and `dashboard`.
 - The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass branches on role: the TUI's pipe is polled and received, driving `_handle_message`; workers are checked by process sentinel only. TUI loss ends the loop through pipe EOF or a dead sentinel; worker loss is joined and dropped without stopping the Hub. Every blocking join runs through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`), so `__aexit__` awaits `_join` before releasing the lock.
 - Worker scaffolds stop gracefully through `SIGTERM`/`SIGINT`, checked as a flag between cycles. The TUI exits normally through its own interface instead, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `app.exit()` covers only the abnormal path and is tracked in `docs/TODO.md` 0.2, not this refactor. Dashboard needs no handler at all; termination without one is acceptable.
 - `_join_service` closes the pipe, then `terminate()` and a fifteen-second wait if still alive, then `kill()`.
 
 ## Resume point
 
-First consolidate [`src/spex/services/live.py`](../src/spex/services/live.py) and [`src/spex/services/backfill.py`](../src/spex/services/backfill.py) into one ingestion scaffold and update `SERVICE_TYPES`. Then continue [`src/spex/services/tui.py`](../src/spex/services/tui.py) at 9b: pass the TUI's child pipe endpoint through to the `Spex` app and wire it functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing hands it to the app or reads it. The Hub's `asyncio` supervision mechanism remains reviewed. No request ledger is needed: commands are one-off and fire-and-forget for the walking skeleton.
+Joshua created [`src/spex/services/ingest.py`](../src/spex/services/ingest.py), removed the former live and backfill modules, updated the Hub registry to the `ingest` role, and consolidated raw storage under `raw/`. Continue [`src/spex/services/tui.py`](../src/spex/services/tui.py) at 9b: pass the TUI's child pipe endpoint through to the `Spex` app and wire it functionally. The Hub's `asyncio` supervision mechanism remains reviewed. No request ledger is needed for the walking skeleton.
 
 Hub review findings, all resolved this session except (1):
 
@@ -56,10 +56,9 @@ Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only 
 
 Remaining refactor sequence:
 
-1. Replace the separate live and backfill scaffolds and Hub roles with one ingestion service.
-2. Pass a child pipe to the Textual service and wire it functionally (9b), then review it (9c).
-3. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
-4. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
+1. Pass a child pipe to the Textual service and wire it functionally (9b), then review it (9c).
+2. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
+3. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
 
 ## Confirmed boundaries
 

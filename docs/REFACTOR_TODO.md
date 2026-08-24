@@ -6,17 +6,17 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 ## Resume here
 
-Steps 1 through 8 contain the completed direct-pipe work, but their separate live and backfill roles are now transitional. Step 9 is partly done — see each section below.
+Steps 1 through 8 contain the completed direct-pipe work. Joshua has consolidated the former live and backfill roles under `src/spex/services/ingest.py`. Step 9 is partly done — see each section below.
 
-The target topology has one ingestion service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity. Joshua consolidates the scaffolds and Hub registry before entry-point integration; the reviewed pipe, signal, and supervision mechanisms remain applicable.
+The target topology has one `ingest` service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity.
 
-The transitional live, backfill, and pipeline scaffolds implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection between bounded work cycles. The consolidated ingestion and processing workers retain that lifecycle.
+The consolidated ingestion and processing workers implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection between bounded work cycles.
 
 TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `Spex.exit()` covers only the abnormal path — an external kill of the Hub or a supervisor exception, where `_join()` would otherwise terminate the TUI unhandled and leave the terminal in raw mode — and is tracked in `docs/TODO.md` 0.2 as implementation rather than refactor scope. The TUI is still the one genuine two-way exception for messaging: it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic once step 9 finishes.
 
 Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. Spex currently has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
 
-First replace the separate live and backfill roles with one ingestion scaffold and update the Hub registry. Then continue at 9b, wiring the TUI's child pipe endpoint functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing passes it to the `Spex` app or reads it. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
+Continue at 9b, wiring the TUI's child pipe endpoint functionally. `SpexProcess.__init__` accepts `pipe` structurally, but nothing passes it to the `Spex` app or reads it. No request ledger is needed — commands are one-off and fire-and-forget for the walking skeleton; that whole design is deferred in `process-control.md` until a correlated response is actually needed.
 
 ## Confirmed target
 
@@ -70,7 +70,7 @@ Current integration gap: the TUI's pipe carries no traffic — the Hub's supervi
 
 ### 4. `src/spex/services/live.py`
 
-Complete under the former topology and now transitional. `LiveService(ServiceProcess)` implements only `_run_cycle()`; its reviewed worker lifecycle transfers to the consolidated ingestion service.
+Historical step, complete. The reviewed `LiveService` worker lifecycle now belongs to `IngestionService`; `live.py` is removed.
 
 - [x] a. Accept the child pipe endpoint through process construction.
 - [x] b. Never send or receive an application message on it; the base class polls once per work cycle and treats EOF as a stop signal.
@@ -82,7 +82,7 @@ Complete under the former topology and now transitional. `LiveService(ServicePro
 
 ### 5. `src/spex/services/backfill.py`
 
-Complete under the former topology and now transitional. `BackfillService(ServiceProcess)` is removed when Joshua consolidates ingestion; archive replay becomes the ingestion service's `replay` phase.
+Historical step, complete. `BackfillService` and `backfill.py` are removed; archive replay is the ingestion service's `replay` phase.
 
 - [x] a. Apply the reviewed live-service control structure to backfill.
 - [x] b. Drop the `paused` half of the state contract; the service is only running or stopped.
@@ -124,7 +124,7 @@ Open implementation gap, tracked in `docs/TODO.md` 0.7 rather than here: `run()`
 - [x] g. Remove listener address, authentication key, listener lifecycle, and listener-shutdown messaging.
 - [x] h. Preserve graceful join and forced-termination ownership.
 - [x] i. Review the direct-pipe supervision mechanism. `_spawn_service` remains the uniform spawn path.
-- [ ] j. Replace the `live` and `backfill` registry roles with `ingestion` after Joshua creates the consolidated scaffold; retain `pipeline`, `tui`, and `dashboard`.
+- [x] j. Replace the `live` and `backfill` registry roles with `ingest`; retain `pipeline`, `tui`, and `dashboard`.
 - [ ] k. Drain ingestion and processing telemetry in the supervision loop and retain process sentinels as authoritative liveness.
 
 ### 9. `src/spex/services/tui.py`

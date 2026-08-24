@@ -18,7 +18,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Replace direct `websockets` and HTTPX ingestion use with a pinned `atproto` release containing `atproto_jetstream` and refresh `uv.lock`.
 - [x] Use the `spawn` multiprocessing context on every supported platform.
 - [x] Create importable service scaffolds for live ingestion, backfill, validation and transformation, and Streamlit; the separate ingestion scaffolds are now transitional.
-- [ ] Replace the live and backfill scaffolds with one ingestion service.
+- [x] Replace the live and backfill scaffolds with one ingestion service under the `ingest` role.
 - [x] Resolve M0 raw files and DuckLake data under the Spex application-data directory provided by `platformdirs`.
 - [x] Define the exact M0 data, configuration, and runtime paths beneath the resolved `platformdirs` roots.
 - [x] Bootstrap the accepted directory tree before starting application processes.

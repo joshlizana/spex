@@ -4,9 +4,8 @@ import signal
 from dataclasses import dataclass
 from multiprocessing import connection, context, get_context
 
-from spex.services.backfill import BackfillService
 from spex.services.dashboard import DashboardService
-from spex.services.live import LiveService
+from spex.services.ingest import IngestionService
 from spex.services.lock import HubLock
 from spex.services.pipeline import PipelineService
 from spex.services.service import ServiceProcess
@@ -14,8 +13,7 @@ from spex.services.tui import SpexProcess
 
 
 SERVICE_TYPES = {
-    "live": LiveService,
-    "backfill": BackfillService,
+    "ingest": IngestionService,
     "pipeline": PipelineService,
     "tui": SpexProcess,
     "dashboard": DashboardService,
