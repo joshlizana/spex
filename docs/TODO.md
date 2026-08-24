@@ -4,7 +4,7 @@ This file separates the implementation roadmap from its supporting decisions and
 
 ## Implementation roadmap
 
-The active control-plane rewrite follows the file-by-file checklist in [Control-plane refactor TODO](REFACTOR_TODO.md).
+The completed control-plane rewrite is recorded in [Control-plane refactor TODO](REFACTOR_TODO.md). The walking-skeleton roadmap below remains active.
 
 ### 0. Deliver the walking skeleton
 
@@ -31,7 +31,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Create a dedicated duplex control pipe before spawning each process.
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [x] Run Textual in the main process and spawn the Hub as a non-daemonic IPC process.
-- [ ] Complete the TUI readiness, pipe-loss, and exit lifecycle.
+- [x] Complete the TUI readiness, pipe-loss, and exit lifecycle.
 - [x] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [x] Start ingestion, processing, and dashboard automatically before the Hub reports readiness.
@@ -86,7 +86,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 #### 0.7 Complete the analytical view
 
 - [ ] Launch Streamlit as a supervised child process.
-- [ ] Detect Hub loss in the dashboard through pipe EOF, replacing the placeholder loop that never reads its pipe.
+- [x] Detect Hub loss in the dashboard through pipe EOF.
 - [ ] Open DuckLake through a read-only dashboard boundary.
 - [ ] Display the posts table.
 - [ ] Display post counts grouped by DID.
@@ -98,7 +98,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Trace one replayed record through the same downstream path.
 - [ ] Confirm the displayed rows retain the identity of the ingested mutations.
 - [ ] Confirm Textual remains responsive while its IPC reader and service work run.
-- [ ] Confirm closing Textual causes the orchestrator to stop and join every child process.
+- [x] Confirm closing Textual causes the orchestrator to stop and join every child process.
 - [ ] Record every deferred production concern in the supporting backlog without expanding the slice.
 
 The slice excludes persistent credential storage, complete collection coverage, raw-store selection, recovery hardening, retention cleanup, performance tuning, and supported-environment validation.
@@ -201,7 +201,7 @@ Resolve these items when their roadmap increment becomes active.
 
 ### Paths, configuration, and logging
 
-- [ ] Define the application-data, configuration, runtime, raw-data, dataset, benchmark, and log paths resolved through `platformdirs`.
+- [x] Define the application-data, configuration, runtime, raw-data, dataset, benchmark, and log paths resolved through `platformdirs`.
 - [ ] Define configuration persistence and validation boundaries.
 - [ ] Define service health, metrics, logging, and tracing conventions.
 - [x] Select centralized orchestrator logging through an unbounded multiprocessing queue and one listener thread.
@@ -233,17 +233,17 @@ Resolve these items when their roadmap increment becomes active.
 
 ### Process lifecycle
 
-- [ ] Define process readiness and shutdown behavior.
-- [ ] Test automatic ingestion, validation-and-transformation, and dashboard startup.
+- [x] Define process readiness and shutdown behavior.
+- [x] Test automatic ingestion, validation-and-transformation, and dashboard startup.
 - [ ] Test graceful child shutdown after main-process loss.
-- [ ] Test worker restart exhaustion and degraded health.
+- [ ] Test worker launch-retry exhaustion and resulting application shutdown.
 
 ### IPC transport and protocol
 
-- [ ] Verify duplex `Connection` transfer under the explicit `spawn` context.
-- [ ] Verify that both processes close unused pipe endpoints and detect peer loss through EOF.
-- [ ] Define the readiness protocol-version representation and mismatch response.
-- [ ] Define the native dictionary payloads and error responses required by the walking skeleton.
+- [x] Verify duplex `Connection` transfer under the explicit `spawn` context.
+- [x] Verify that both processes close unused pipe endpoints and detect peer loss through EOF.
+- [x] Omit readiness protocol versioning because every session starts all processes from one Spex installation on fresh pipes.
+- [x] Define the native dictionary payloads and error responses required by the walking skeleton.
 - [ ] Define and test initial-state validation and readiness transition.
 - [ ] Test connection-bound service identity, health display, and log correlation.
 - [ ] Test one pipe per process instance and fresh-pipe creation on restart.
@@ -330,7 +330,7 @@ This phase is a research gate for ingestion and downstream batch processing.
 ## 9. Textual operational interface
 
 - [ ] Define the TUI information architecture, configuration workflow, and health presentation.
-- [ ] Define how the TUI obtains service state and metrics.
+- [x] Define how the TUI obtains service state and metrics.
 - [ ] Define retained rejection counts and cleanup-failure details.
 - [ ] Define the next-start retention-setting workflow and validation.
 - [ ] Define next-start retention-increase replay offers and retention-decrease data-loss confirmation.
