@@ -72,6 +72,7 @@ The control-plane refactor sequence is complete.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
 - Control-plane integration passes for the implemented transport scaffold and shutdown lifecycle. Joshua verified that a real `spex` run starts all operational services and exits through `q` with code zero and no Spex process left behind. Source compilation and whitespace validation pass with automatic startup.
 - A bounded pipeline-cycle probe exits normally and publishes the expected cumulative `records_processed` and rolling `records_per_second` payload.
+- An isolated-PTY probe sends `SIGTERM` directly to the main Textual process. It exits with code 143 without restoring termios; `ECHO`, `ICANON`, `IEXTEN`, and `ISIG` remain disabled. The open TUI `SIGTERM` task is required.
 - The managed Codex sandbox rejects local `socket.send()` with `EPERM`, which prevents asyncio's cross-thread self-pipe wakeup and makes `asyncio.to_thread()` checks hang after their functions return. Run Hub integration checks with approved unsandboxed execution; normal Linux and WSL runs do not exhibit this sandbox behavior.
 
 ## Primary references
