@@ -6,7 +6,7 @@ This checklist replaces listener-based IPC with Hub-created duplex pipes while p
 
 ## Resume here
 
-Steps 1 through 9 contain the completed direct-pipe work. Joshua has consolidated the former live and backfill roles under `src/spex/services/ingest.py`. Continue at step 10.
+Steps 1 through 11 contain the completed direct-pipe work. Joshua has consolidated the former live and backfill roles under `src/spex/services/ingest.py`. Continue at step 12's integration checkpoint.
 
 The target topology has one `ingest` service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity.
 
@@ -40,7 +40,7 @@ Complete and review one numbered file step before beginning the next. Keep each 
 
 Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
-Current integration gap: the TUI monitors its pipe for Hub loss but sends no operator traffic yet. What the TUI sends is implementation, tracked in `docs/TODO.md` 0.2. The `spex` entry point still runs `Spex` directly rather than bootstrapping the Hub, which step 10 closes. No ledger gap — none is needed.
+The TUI monitors its pipe for Hub loss but sends no operator traffic yet. What the TUI sends is implementation, tracked in `docs/TODO.md` 0.2. The `spex` entry point bootstraps the filesystem and runs the Hub under its async context. No ledger gap exists — none is needed.
 
 ## File sequence
 
@@ -137,11 +137,11 @@ What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.
 
 ### 10. `src/spex/__init__.py`
 
-- [ ] a. Bootstrap the filesystem and start the Hub as the main process.
-- [ ] b. Let the Hub create the Textual child and remaining service children.
-- [ ] c. Preserve the bare `spex` entry point.
-- [ ] d. Align the entry-point docstring with actual ownership.
-- [ ] e. Review the file before continuing.
+- [x] a. Bootstrap the filesystem and start the Hub as the main process.
+- [x] b. Let the Hub create the Textual child and remaining service children.
+- [x] c. Preserve the bare `spex` entry point.
+- [x] d. Align the entry-point docstring with actual ownership.
+- [x] e. Review the file before continuing. The async helper enters the Hub context before supervision, so lock acquisition and teardown share one event-loop lifecycle.
 
 ### 11. Obsolete transport removal
 

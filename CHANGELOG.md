@@ -49,6 +49,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Record shutdown requests in the Hub's signal handler and join services after the supervision loop exits.
 - Exit the TUI through its own interface and let the Hub read that child loss as its shutdown trigger.
 - Monitor the TUI's Hub pipe from a background thread and exit Textual through its thread-safe boundary on pipe loss.
+- Run the Hub in the main process from the bare `spex` entry point under its async lock-and-cleanup context.
 - Refactor the live-service scaffold to receive native control dictionaries through its Hub-created pipe and exit on pipe loss.
 - Apply the reviewed pipe-control lifecycle to the backfill-service scaffold.
 - Extract the shared worker lifecycle into `ServiceProcess` and reduce live, backfill, and pipeline to bounded-work subclasses.

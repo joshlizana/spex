@@ -6,13 +6,14 @@ This document provides the current working context for the next agent. [`AGENTS.
 
 ## Current objective
 
-Complete entry-point integration on the consolidated ingestion architecture.
+Complete the control-plane integration checkpoint on the consolidated ingestion architecture.
 
 The ingestion service has exactly two phases: `replay` and `live`. The ATProto Python SDK's `atproto_jetstream.replay()` owns archive planning, decoding, cursor-based seam deduplication, and the transition to the WebSocket tail. Replay and live share one process, raw writer, durable cursor, and state artifact.
 
 ## Implemented structure
 
 - The Hub runs in the main process under an explicit multiprocessing `spawn` context.
+- The bare `spex` entry point bootstraps the filesystem, enters the Hub's async context, and runs supervision on one event loop.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
 - `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, EOF-poll, and signal lifecycle.
 - `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. The TUI monitors its pipe from a daemon thread and exits through Textual's thread-safe boundary on EOF. Neither installs a signal handler. `DashboardService.run()` currently blocks in a placeholder sleep loop pending its real body in `docs/TODO.md` 0.7.
@@ -26,7 +27,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 ## Resume point
 
-TUI transport steps 9b and 9c are complete. `SpexProcess` monitors the Hub pipe from a daemon thread, exits Textual through `call_from_thread()` on EOF, and orders shutdown so the thread stops before the pipe closes. Continue at step 10 in [`src/spex/__init__.py`](../src/spex/__init__.py): bootstrap the filesystem and run the Hub in the main process. No request ledger is needed for the walking skeleton.
+Entry-point step 10 is complete. The bare `spex` command bootstraps the filesystem, then runs supervision inside `async with Hub()`, ensuring the Hub lock and child cleanup share the event-loop lifecycle. Continue at step 12's integration checkpoint. No request ledger is needed for the walking skeleton.
 
 Hub review findings, all resolved this session except (1):
 
@@ -55,8 +56,7 @@ Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only 
 
 Remaining refactor sequence:
 
-1. Change the `spex` entry point to bootstrap and run the Hub as the main process (step 10).
-2. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
+1. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
 
 ## Confirmed boundaries
 
