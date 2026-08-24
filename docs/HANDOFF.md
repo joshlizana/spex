@@ -27,7 +27,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 ## Resume point
 
-The control-plane refactor and integration checkpoint are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 with automatic startup, state exchange, real health, and the Hub-ready/error handshake. No request ledger is needed.
+The control-plane refactor and integration checkpoint are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 with automatic startup, state exchange, and real health. No request ledger is needed.
 
 Hub review findings are resolved. `_join_service`'s blocking terminate/kill escalation runs through `asyncio.to_thread`, and `_join` overlaps every child's escalation under one `asyncio.gather`. `run()` owns supervision on one event loop; signal handlers only record shutdown intent, and the Hub context completes child cleanup before releasing the lock.
 
@@ -41,7 +41,7 @@ The current Hub still waits for transitional `start` and `stop` messages that th
 
 TUI and dashboard are long-lived and non-cyclic, so both use pipe-monitor threads. Textual runs in the main process and exits through its interface; closing its pipe ends the Hub. Verified this session: Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so Ctrl-C delivers a literal `\x03` byte to Textual and no `SIGINT` to the foreground process group. Spex has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`.
 
-Remaining startup gap: the TUI-Hub protocol has no ready/error handshake. If the Hub fails before Textual enters its event loop, such as on lock contention, the TUI cannot yet report that failure deterministically. This remains in `docs/TODO.md` 0.2.
+The TUI now waits for the Hub's first `ready` or `error` message before starting its pipe-monitor thread or entering Textual. Lock contention and other failures before readiness return a deterministic startup error; handshake failure also stops and joins the Hub and closes the parent pipe. The current `ready` message carries no protocol version or service snapshot and precedes automatic operational-service startup, so the complete readiness payload and final readiness boundary remain with the state-exchange work.
 
 Worker pipe monitoring now runs from a daemon thread, so Hub loss is detected during a work cycle. A send lock remains unnecessary until telemetry introduces concurrent sends.
 
@@ -64,7 +64,7 @@ The control-plane refactor sequence is complete.
 - All ten source modules import successfully under the project environment.
 - A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
-- Control-plane integration passes for the implemented transport scaffold and shutdown lifecycle. A real PTY `spex` run starts Textual in the main process and exits the complete application through `q` with code zero. Automatic operational-service startup is the next implementation step.
+- Control-plane integration passes for the implemented transport scaffold and shutdown lifecycle. A real PTY `spex` run starts Textual in the main process and exits the complete application through `q` with code zero. Source compilation and whitespace validation pass with the ready/error handshake. Automatic operational-service startup is the next implementation step.
 
 ## Primary references
 

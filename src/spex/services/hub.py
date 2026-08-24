@@ -44,8 +44,23 @@ class HubProcess(SpawnProcess):
     async def _run_hub(self) -> None:
         """Run the Spex Hub supervision loop."""
         self._hub = Hub(pipe=self._pipe)
-        async with self._hub as hub:
-            await hub.run()
+        ready = False
+
+        try:
+            async with self._hub as hub:
+                self._pipe.send({"type": "ready"})
+                ready = True
+                await hub.run()
+        except Exception as exc:
+            if not ready:
+                try:
+                    self._pipe.send(
+                        {"type": "error", "message": str(exc)}
+                    )
+                except (BrokenPipeError, EOFError, OSError):
+                    # The TUI endpoint is unavailable; preserve the startup error.
+                    pass
+            raise
 
 
 class Hub:

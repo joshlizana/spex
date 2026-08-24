@@ -32,7 +32,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
 - [x] Run Textual in the main process and spawn the Hub as a non-daemonic IPC process.
 - [ ] Complete the TUI readiness, pipe-loss, and exit lifecycle.
-- [ ] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
+- [x] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Start ingestion, processing, and dashboard automatically after Hub readiness and configuration validation.
 - [ ] Show ingestion's `replay` or `live` phase.

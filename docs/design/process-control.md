@@ -52,7 +52,7 @@ The TUI exposes no service-lifecycle messages. Closing Textual requests applicat
 
 An invalid readiness message or protocol mismatch closes the TUI pipe and reports startup failure. After readiness, an invalid state message closes the connection and marks the TUI degraded. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
 
-The walking skeleton still needs to implement this readiness and state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
+The walking skeleton implements the initial `ready` or `error` exchange and waits for it before entering Textual. The current `ready` message has no payload and is sent after lock acquisition but before operational-service startup; the protocol version, initial state, and final readiness boundary remain part of the state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
 
 ## Health and connection loss
 
@@ -74,7 +74,7 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation whose Hub finds `hub.lock` held fails lock acquisition. Reporting that startup failure deterministically to the new Textual parent remains deferred with the Hub-ready handshake. If a Hub dies, its operational children observe pipe EOF and exit through their monitor threads; its Textual parent also observes EOF and exits through Textual's thread-safe boundary. Ctrl-C remains an ignored input byte while Textual disables `ISIG` unless Spex binds it.
+A new `spex` invocation whose Hub finds `hub.lock` held reports the startup failure to its Textual parent before exiting. If a Hub dies, its operational children observe pipe EOF and exit through their monitor threads; its Textual parent also observes EOF and exits through Textual's thread-safe boundary. Ctrl-C remains an ignored input byte while Textual disables `ISIG` unless Spex binds it.
 
 ## Application shutdown
 

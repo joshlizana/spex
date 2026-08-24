@@ -29,8 +29,9 @@ class Spex:
     def __enter__(self):
         self._start_hub()
         try:
+            self._handshake()
             self._pipe_thread.start()
-        except Exception:
+        except BaseException:
             if self._hub_process is not None:
                 self._hub_process.terminate()
                 self._hub_process.join()
@@ -82,6 +83,22 @@ class Spex:
             except (EOFError, OSError):
                 self._shutdown = True
                 self._app.call_from_thread(self._app.exit)
+
+    def _handshake(self) -> None:
+        """Perform a handshake with the Hub process."""
+        if self._pipe is None:
+            raise RuntimeError("Hub pipe is not initialized.")
+
+        try:
+            message = self._pipe.recv()
+            if message.get("type") == "ready":
+                return
+            elif message.get("type") == "error":
+                raise RuntimeError(f"Hub error: {message.get('message')}")
+            else:
+                raise RuntimeError(f"Unexpected Hub message: {message}")
+        except (EOFError, OSError):
+            raise RuntimeError("Hub process terminated unexpectedly.")
 
 
 class StatusCircle(Static):
