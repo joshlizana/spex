@@ -29,7 +29,7 @@ Spex needs queryable logs from its orchestrator, Textual interface, and applicat
 
 ## Design
 
-The main-process orchestrator creates an unbounded `multiprocessing.Queue` from the application `spawn` context and passes it to every child, including the Textual process. Spex loggers submit records through `logging.handlers.QueueHandler`. A `QueueListener` thread in the orchestrator owns the handlers and remains the only application-log writer.
+The Hub creates an unbounded `multiprocessing.Queue` from the application `spawn` context and passes it to every operational child. Textual controls logging and reads persisted records through its Hub contract rather than joining the worker logging queue directly. Service loggers submit records through `logging.handlers.QueueHandler`. A `QueueListener` thread in the Hub owns the handlers and remains the only application-log writer.
 
 The logging queue carries telemetry only. Service commands, health, and lifecycle messages continue to use the established `multiprocessing.connection` control channel.
 

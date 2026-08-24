@@ -27,24 +27,24 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 #### 0.2 Establish the minimal control plane
 
 - [x] Define the walking-skeleton service state as running or stopped, with ingestion additionally reporting `replay` or `live`.
-- [ ] Create the dedicated main-process orchestrator and explicit `spawn` context.
-- [ ] Create a dedicated duplex control pipe before spawning each child.
+- [x] Create the dedicated Hub process and explicit `spawn` context.
+- [x] Create a dedicated duplex control pipe before spawning each process.
 - [x] Remove the obsolete runtime IPC, ports, and child-lock directories from application bootstrap.
-- [ ] Spawn Textual as a non-daemonic IPC spoke with inherited terminal streams.
-  Blocked: a real `spex` PTY run confirms that Python's spawned multiprocessing child closes standard input, and Textual fails when its Linux driver calls `sys.__stdin__.fileno()`.
+- [x] Run Textual in the main process and spawn the Hub as a non-daemonic IPC process.
 - [ ] Complete the TUI initial-state, shutdown-request, pipe-loss, and exit lifecycle.
+- [ ] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
 - [ ] Define the walking-skeleton service transitions.
 - [ ] Add a Textual control for starting and stopping ingestion.
 - [ ] Show ingestion's `replay` or `live` phase.
 - [ ] Start validation and transformation automatically with ingestion.
-- [ ] Launch every child with `multiprocessing.Process` and retain its process handle.
-- [ ] Monitor orchestrator-owned child pipe endpoints independently of Textual.
+- [x] Launch the Hub and every operational child with `multiprocessing.Process` and retain each process handle at its ownership boundary.
+- [x] Monitor Hub-owned child pipe endpoints independently of Textual.
 - [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
 - [x] Define the minimal control and health messages needed by the slice.
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
 - [ ] Show actual child-process and connection state in the Textual status view.
-- [ ] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
+- [x] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
 
 #### 0.3 Establish the shared storage path
 
@@ -182,9 +182,9 @@ Resolve these items when their roadmap increment becomes active.
 
 ## 0. Release intent and constraints
 
-- [x] Use a direct entry point into the main-process orchestrator with no structured headless command interface.
+- [x] Use a direct entry point into main-process Textual with no structured headless command interface.
 - [x] Supervise each named service through a direct `multiprocessing.Process` handle.
-- [x] Assign listener ownership and connection monitoring to the dedicated main-process orchestrator.
+- [x] Assign operational connection monitoring to the dedicated Hub process.
 - [x] Return TUI connection-reader state through `post_message()` or `call_from_thread()`.
 - [x] Define walking-skeleton completion as a runnable application that starts the TUI and orchestrator, activates ingestion and processing, and displays replayed and live data in Streamlit.
 - [x] Prove replay and live ingestion through the same downstream storage and processing path.
@@ -218,9 +218,9 @@ Resolve these items when their roadmap increment becomes active.
 ### Process identity and locking
 
 - [ ] Preserve layer dependency rules while decomposing implementation modules.
-- [x] Avoid Textual stream-capture interference by creating multiprocessing resources and children from a dedicated main-process orchestrator.
-- [x] Assign the spawned Textual spoke to the main-process orchestrator.
-- [ ] Verify spawned Textual terminal input, rendering, resize handling, graceful exit, hub-loss exit, terminal restoration, and return-code propagation on Linux and WSL.
+- [x] Avoid spawned-child terminal loss by running Textual in the main process.
+- [x] Assign the spawned Hub process to the main-process Textual owner.
+- [ ] Verify main-process Textual rendering, resize handling, Hub-loss exit, terminal restoration, and return-code propagation on Linux and WSL.
 - [ ] Test advisory-lock exclusivity and process-exit release on Linux and WSL.
 - [ ] Test stable in-place Hub-lock metadata writes and concurrent reads.
 - [ ] Test session-ID stability across worker restarts and renewal across orchestrator replacement.

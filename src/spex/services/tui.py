@@ -1,45 +1,84 @@
 import random
 import threading
 
-from multiprocessing import connection, get_context
+from multiprocessing import connection, context, get_context
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header, Label, Static
 
+from spex.services.hub import HubProcess
+
 SpawnProcess = get_context("spawn").Process
 
 
-class SpexProcess(SpawnProcess):
-    """Provide shared process lifecycle and Hub control for the Spex TUI."""
+class Spex:
+    """Own the main-process TUI and its Hub child lifecycle."""
 
-    def __init__(self, pipe: connection.Connection):
-        super().__init__()
-        self._pipe: connection.Connection = pipe
-        self._app: Spex | None = None
+    def __init__(self):
+        self._app: Tui = Tui()
+        self._spawn_context: context.SpawnContext = get_context("spawn")
         self._shutdown = False
+        self._hub_process: SpawnProcess | None = None
+        self._pipe: connection.Connection | None = None
+        self._pipe_thread: threading.Thread = threading.Thread(
+            target=self._pipe_monitor,
+            daemon=True,
+        )
+
+    def __enter__(self):
+        self._start_hub()
+        try:
+            self._pipe_thread.start()
+        except Exception:
+            if self._hub_process is not None:
+                self._hub_process.terminate()
+                self._hub_process.join()
+            if self._pipe is not None:
+                self._pipe.close()
+            raise
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._shutdown = True
+        if self._pipe_thread is not None:
+            self._pipe_thread.join()
+        if self._pipe is not None:
+            self._pipe.close()
+        if self._hub_process is not None:
+            self._hub_process.join()
 
     def run(self) -> None:
         """Run the Spex TUI until it exits, releasing the Hub pipe afterward."""
-        self._app = Spex()
-        pipe_thread = threading.Thread(target=self.pipe, daemon=True)
-        try:
-            pipe_thread.start()
-            try:
-                self._app.run()
-            finally:
-                self._shutdown = True
-                pipe_thread.join()
-        finally:
-            self._pipe.close()
 
-    def pipe(self) -> None:
+        try:
+            self._app.run()
+        finally:
+            self._shutdown = True
+
+    def _start_hub(self) -> None:
+        """Create the TUI control pipe and spawn the Hub process."""
+        parent_pipe, child_pipe = self._spawn_context.Pipe(duplex=True)
+
+        try:
+            hub_process = HubProcess(child_pipe)
+            hub_process.start()
+        except BaseException:
+            parent_pipe.close()
+            raise
+        finally:
+            child_pipe.close()
+
+        self._hub_process = hub_process
+        self._pipe = parent_pipe
+
+    def _pipe_monitor(self) -> None:
         """Monitor the Spex TUI control-plane pipe."""
         while not self._shutdown:
             try:
                 if self._pipe.poll(timeout=0.1):
                     message = self._pipe.recv()
-                    # message handling logic would go here
+                    # TUI receives no application messages in M0.
             except (EOFError, OSError):
                 self._shutdown = True
                 self._app.call_from_thread(self._app.exit)
@@ -58,7 +97,7 @@ class StatusCircle(Static):
         self.styles.color = random.choice(["green", "red", "yellow"])
 
 
-class Spex(App):
+class Tui(App):
     """Provide the Spex Textual control plane and operational interface."""
 
     DEFAULT_CSS = """

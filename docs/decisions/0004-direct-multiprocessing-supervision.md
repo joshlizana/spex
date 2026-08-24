@@ -4,7 +4,7 @@ Status: accepted
 
 ## Context and problem statement
 
-Spex needs to supervise four named child processes with role-specific state, IPC identities, readiness, health, graceful shutdown, and forced termination. These children are Textual, ingestion, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
+Spex needs to supervise a Hub process and three named operational-service children with role-specific state, IPC identities, readiness, health, graceful shutdown, and forced termination. The operational children are ingestion, processing, and Streamlit. Task-pool abstractions do not directly represent those lifecycles.
 
 ## Decision drivers
 
@@ -27,11 +27,11 @@ Spex needs to supervise four named child processes with role-specific state, IPC
 
 Chosen option: **Direct `multiprocessing.Process` supervision**, because it represents every Spex service as a named process with a direct lifecycle and preserves the established IPC, identity, locking, and shutdown contracts.
 
-The Hub creates every child and supplies its duplex pipe endpoint during `spawn`. Children never discover or reconnect to an independently running Hub. This lifetime binding removes listener, endpoint-authentication, and connection-admission requirements while preserving message-oriented `Connection` semantics.
+The main-process Textual owner creates the Hub and their duplex pipe. The Hub creates every operational-service child and supplies its duplex pipe endpoint during `spawn`. Children never discover or reconnect to an independently running Hub. This lifetime binding removes listener, endpoint-authentication, and connection-admission requirements while preserving message-oriented `Connection` semantics.
 
 ### Consequences
 
-- The main-process orchestrator creates every child with `multiprocessing.Process` and retains its process handle.
+- The main-process Textual owner retains the Hub process handle; the Hub retains every operational-service process handle.
 - The orchestrator owns child monitoring independently of Textual's event loop, through pipe endpoints and process sentinels it holds directly.
 - Textual's main thread remains the exclusive owner of UI state and widget updates.
 - Textual connection handling returns state changes through `post_message()` or `call_from_thread()`.
@@ -42,4 +42,4 @@ The Hub creates every child and supplies its duplex pipe endpoint during `spawn`
 
 ### Confirmation
 
-Compliance requires the orchestrator to retain a direct `multiprocessing.Process` handle and role identity for every child under the `spawn` context. Lifecycle verification covers startup, observed exit, graceful stop, forced stop, UI responsiveness, thread-safe UI updates, and supported-platform behavior.
+Compliance requires Textual to retain the Hub's direct `multiprocessing.Process` handle and the Hub to retain a handle and role identity for every operational child under the `spawn` context. Lifecycle verification covers startup, observed exit, graceful stop, forced stop, UI responsiveness, thread-safe UI updates, and supported-platform behavior.

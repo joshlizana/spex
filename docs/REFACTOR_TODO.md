@@ -1,18 +1,18 @@
 # Control-plane refactor TODO
 
-Status: active
+Status: complete
 
 This checklist replaces listener-based IPC with Hub-created duplex pipes while preserving a reviewable, file-at-a-time workflow. Joshua implements application behavior. Agents review each completed file and maintain its documentation, comments, and docstrings.
 
 ## Resume here
 
-Steps 1 through 11 contain the completed direct-pipe work. Joshua has consolidated the former live and backfill roles under `src/spex/services/ingest.py`. Continue at step 12's integration checkpoint.
+Steps 1 through 12 contain the completed direct-pipe work. Textual runs in the main process, owns the Hub process handle, and communicates with it through one direct pipe. The Hub owns ingestion, pipeline, and dashboard.
 
 The target topology has one `ingest` service with exactly two phases: `replay` and `live`. `atproto_jetstream.replay()` owns archive planning, decoding, seam deduplication, and the transition to the WebSocket tail. Backfill is no longer a service identity.
 
 The consolidated ingestion and processing workers implement the reviewed worker lifecycle: no `pause`/`resume`, spawn-only `start`, signal-based `stop`, and pipe-EOF Hub-loss detection from a daemon monitor thread.
 
-TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic (TUI blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither can poll a pipe between cycles. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `Spex.exit()` covers only the abnormal path — an external kill of the Hub or a supervisor exception, where `_join()` would otherwise terminate the TUI unhandled and leave the terminal in raw mode — and is tracked in `docs/TODO.md` 0.2 as implementation rather than refactor scope. The TUI is still the one genuine two-way exception for messaging: it is the service started at launch rather than on operator command, and its pipe is meant to carry real operator-intent/state traffic.
+TUI and dashboard don't fit that pattern — both are long-lived and non-cyclic, so each monitors its pipe from a daemon thread. Textual exits through its own interface, closes the Hub pipe, and joins the Hub. Hub EOF crosses Textual's thread-safe boundary and exits the TUI. The TUI remains the one genuine two-way exception for messaging.
 
 Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. Spex currently has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the TUI interface is therefore the only normal shutdown path.
 
@@ -20,8 +20,8 @@ The TUI monitors its child endpoint from a daemon thread. Pipe EOF crosses Textu
 
 ## Confirmed target
 
-- The Hub creates every child process and retains its process handle.
-- The Hub creates a duplex `multiprocessing.Pipe` for every child and passes one endpoint during spawn.
+- Textual creates and retains the Hub process handle. The Hub creates and retains every operational-service process handle.
+- Textual creates its Hub pipe; the Hub creates a duplex `multiprocessing.Pipe` for every operational child and passes one endpoint during spawn.
 - The Hub and the TUI exchange native Python dictionaries with `Connection.send()` and `Connection.recv()`. Ingestion and processing send advisory telemetry, including ingestion's phase, but receive no commands. Dashboard sends no messages.
 - Pipe ownership supplies service identity for every child. Messages contain `type`, `payload`, and a `message_id` only for correlated exchanges — only the TUI ever sends one.
 - Pipe EOF is the only signal of Hub loss for ingestion and processing, checked from a daemon monitor thread. It also serves the dashboard. The TUI's monitor thread exits Textual on EOF. Process sentinels report every child's exit regardless.
@@ -40,7 +40,7 @@ Complete and review one numbered file step before beginning the next. Keep each 
 
 Guard expected architectural boundaries: pipe closure, child-process exit, partial resource acquisition, and failures crossing a thread boundary. Let ordinary programming errors surface naturally. Add narrower defensive handling when testing or observed failures establish a need. This includes timeout and retry criteria: defer them until an observed failure demonstrates the need, and let an unmatched or malformed internal message crash the Hub during this stage rather than degrade gracefully.
 
-The TUI monitors its pipe for Hub loss but sends no operator traffic yet. What the TUI sends is implementation, tracked in `docs/TODO.md` 0.2. The `spex` entry point bootstraps the filesystem and runs the Hub under its async context. No ledger gap exists — none is needed.
+The TUI monitors its pipe for Hub loss but sends no operator traffic yet. What the TUI sends is implementation, tracked in `docs/TODO.md` 0.2. The `spex` entry point bootstraps the filesystem, runs Textual in the main process, and spawns the Hub under its async context. No ledger gap exists — none is needed.
 
 ## File sequence
 
@@ -129,19 +129,19 @@ Complete. `DashboardService` now subclasses `SpawnProcess` directly and accepts 
 
 ### 9. `src/spex/services/tui.py`
 
-- [x] a. Keep the Textual application in the service package as a Hub-spawned child — `SpexProcess(SpawnProcess)` wraps `Spex` and is spawnable via `_spawn_service`.
-- [x] b. Accept and monitor the TUI child pipe endpoint. `SpexProcess` polls it from a daemon thread, receives messages, and crosses Textual's thread boundary with `call_from_thread()` to exit on Hub loss.
-- [x] c. Review the file before continuing. Normal and exceptional Textual exit stop and join the monitor before closing the pipe; partial thread startup still closes the pipe without joining an unstarted thread.
+- [x] a. Keep the Textual application in the service package and run it in the main process so it retains terminal input.
+- [x] b. Create and retain the Hub process and TUI-Hub pipe. A daemon thread monitors Hub EOF and crosses Textual's thread-safe boundary with `call_from_thread()`.
+- [x] c. Review the file before continuing. Normal and exceptional Textual exit stop and join the monitor, close the pipe, and join the Hub; partial process and thread startup clean up only acquired resources.
 
-What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.2: sending operator intents, receiving state across Textual's thread-safe boundary, showing real child and connection state in place of the placeholder health indicator, and treating Textual closure as an application-shutdown request. The abnormal-path `SIGTERM` handler is tracked there too. This step covers only the transport wiring.
+What the TUI does with that pipe is implementation, tracked in `docs/TODO.md` 0.2: sending operator intents, receiving state across Textual's thread-safe boundary, showing real child and connection state in place of the placeholder health indicator, and reporting Hub startup failure. This step covers only the transport wiring.
 
 ### 10. `src/spex/__init__.py`
 
-- [x] a. Bootstrap the filesystem and start the Hub as the main process.
-- [x] b. Let the Hub create the Textual child and remaining service children.
+- [x] a. Bootstrap the filesystem and start Textual in the main process.
+- [x] b. Let Textual create the Hub and let the Hub create the operational-service children.
 - [x] c. Preserve the bare `spex` entry point.
 - [x] d. Align the entry-point docstring with actual ownership.
-- [x] e. Review the file before continuing. The async helper enters the Hub context before supervision, so lock acquisition and teardown share one event-loop lifecycle.
+- [x] e. Review the file before continuing. The entry point wraps Textual and its Hub child in one context-managed lifecycle.
 
 ### 11. Obsolete transport removal
 
@@ -157,7 +157,7 @@ These confirm the transport swap itself. Message traffic on the TUI's pipe is a 
 
 - [x] a. Confirm every source module imports successfully. All ten source modules compile and import under the project environment.
 - [x] b. Confirm the Hub acquires the single runtime lock. A temporary-path probe acquired the lock, rejected a second owner, and released it.
-- [ ] c. Confirm the Hub spawns Textual and each walking-skeleton service with a dedicated pipe. Ingestion, pipeline, and dashboard pass with three distinct endpoints. Textual fails during driver initialization because `multiprocessing` spawn closes the child standard-input stream; `sys.__stdin__.fileno()` raises `ValueError`.
-- [x] d. Confirm child exit is visible through sentinels for every child, and Hub loss is visible through pipe EOF for ingestion, processing, and dashboard. Spawned probes verify clean EOF exit and readable sentinels for both workers and dashboard; the real Hub run observes the failed TUI child and shuts down.
-- [ ] e. Confirm application shutdown closes endpoints and joins every child.
-- [ ] f. Reconcile completed work with `docs/TODO.md`, design documents, and `CHANGELOG.md`.
+- [x] c. Confirm Textual spawns the Hub with a dedicated pipe and the Hub spawns ingestion, pipeline, and dashboard with distinct pipes.
+- [x] d. Confirm process exit and Hub loss are observable. Spawned probes verify worker and dashboard EOF/sentinels; Textual observes Hub EOF through its monitor and retains the Hub process handle.
+- [x] e. Confirm application shutdown closes endpoints and joins every child. A Hub probe starts all three services, stops and restarts pipeline, then closes the TUI endpoint; every process exits and the Hub returns code zero. A real PTY `spex` run exits through `q` with code zero.
+- [x] f. Reconcile completed work with `docs/TODO.md`, design documents, decisions, `README.md`, and `CHANGELOG.md`.

@@ -9,13 +9,11 @@ from spex.services.ingest import IngestionService
 from spex.services.lock import HubLock
 from spex.services.pipeline import PipelineService
 from spex.services.service import ServiceProcess
-from spex.services.tui import SpexProcess
 
 
 SERVICE_TYPES = {
     "ingest": IngestionService,
     "pipeline": PipelineService,
-    "tui": SpexProcess,
     "dashboard": DashboardService,
 }
 
@@ -24,18 +22,41 @@ SERVICE_TYPES = {
 class ManagedService:
     """Represent a managed Spex service."""
 
-    process: ServiceProcess | SpexProcess | DashboardService
+    process: ServiceProcess | DashboardService
     pipe: connection.Connection
 
 
-class Hub:
-    """Represent the main-process Spex Hub scaffold."""
+SpawnProcess = get_context("spawn").Process
 
-    def __init__(self):
+
+class HubProcess(SpawnProcess):
+    """Run the Hub as a TUI-owned spawned process."""
+
+    def __init__(self, pipe: connection.Connection):
+        super().__init__()
+        self._pipe: connection.Connection = pipe
+        self._hub: Hub | None = None
+
+    def run(self) -> None:
+        """Run the Spex Hub supervision loop."""
+        asyncio.run(self._run_hub())
+
+    async def _run_hub(self) -> None:
+        """Run the Spex Hub supervision loop."""
+        self._hub = Hub(pipe=self._pipe)
+        async with self._hub as hub:
+            await hub.run()
+
+
+class Hub:
+    """Represent the Spex service orchestrator scaffold."""
+
+    def __init__(self, pipe: connection.Connection):
         self._running: bool = True
         self._lock: HubLock | None = None
         self._spawn_context: context.SpawnContext = get_context("spawn")
         self._services: dict[str, ManagedService] = {}
+        self._pipe: connection.Connection = pipe
 
     async def __aenter__(self):
         self._lock = HubLock()
@@ -43,12 +64,15 @@ class Hub:
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        self._running = False
+        if self._pipe is not None:
+            self._pipe.close()
         if self._services:
             await self._join()
         if self._lock is not None:
             self._lock.release()
 
-    async def run(self):
+    async def run(self) -> None:
         """Run the Spex Hub supervision loop."""
         loop = asyncio.get_running_loop()
         loop.add_signal_handler(
@@ -62,28 +86,20 @@ class Hub:
             signal.SIGINT,
         )
 
-        # Start the TUI first; it is the primary operator interface, and its exit
-        # is the Hub's shutdown trigger.
-        self._spawn_service("tui")
-
-        # Supervise the running services, handling messages received from the TUI.
+        # Supervise the running services.
         while self._running:
+            try:
+                if self._pipe.poll():
+                    message = self._pipe.recv()
+                    await self._handle_message(message)
+            except (EOFError, OSError):
+                self._running = False
+                continue
+
             for role, service in list(self._services.items()):
-                if role == "tui":
-                    try:
-                        if service.pipe.poll() and service.process.is_alive():
-                            message = service.pipe.recv()
-                            await self._handle_message(message)
-                        if not service.process.is_alive():
-                            self._running = False
-                            continue
-                    except (EOFError, OSError):
-                        self._running = False
-                        continue
-                else:
-                    if not service.process.is_alive():
-                        await asyncio.to_thread(self._join_service, role)
-                        continue
+                if not service.process.is_alive():
+                    await asyncio.to_thread(self._join_service, role)
+                    continue
 
             await asyncio.sleep(0.1)
 
@@ -95,7 +111,7 @@ class Hub:
             # Record the request; run() tears the services down after the loop.
             self._running = False
 
-    async def _handle_message(self, message: dict):
+    async def _handle_message(self, message: dict) -> None:
         """Handle a message received from a specific service."""
 
         match message.get("type"):
@@ -108,7 +124,7 @@ class Hub:
             case _:
                 raise ValueError(f"{message.get('type')}")
 
-    def _spawn_service(self, role: str):
+    def _spawn_service(self, role: str) -> None:
         """Spawn a new instance of a Spex service."""
 
         service_type = SERVICE_TYPES.get(role)
@@ -134,7 +150,7 @@ class Hub:
 
         self._services[role] = ManagedService(process=process, pipe=parent_pipe)
 
-    def _join_service(self, role: str):
+    def _join_service(self, role: str) -> None:
         """Join a specific service process."""
 
         service = self._services.get(role)
@@ -152,7 +168,7 @@ class Hub:
 
             del self._services[role]
 
-    async def _join(self):
+    async def _join(self) -> None:
         """Join all child processes."""
         roles = list(self._services)
         await asyncio.gather(

@@ -59,13 +59,13 @@ The ingestion service has two phases: `replay` consumes the authenticated archiv
 
 | Process | Responsibilities |
 | --- | --- |
-| Hub | Main application entry point, orchestration, session ownership, IPC, supervision, configuration, ephemeral request state, logging, and aggregate health |
-| Textual | Terminal ownership, operator input, configuration views, and operational-health presentation |
+| Textual | Main application entry point, terminal ownership, Hub process supervision, operator input, configuration views, and operational-health presentation |
+| Hub | Orchestration, session ownership, IPC, operational-service supervision, configuration, ephemeral request state, logging, and aggregate health |
 | Ingestion | Jetstream archive replay, seamless transition, live subscription, cursor ownership, and raw writes |
 | Validation and transformation | Schema validation, normalization, and DuckLake loading |
 | Streamlit | Read-only analytical dashboard |
 
-The Hub is the orchestrator and main process. Its failure ends the application session and initiates child shutdown. A child failure degrades only the capability it owns. Starting ingestion ensures that validation and transformation runs. Processing drains and stops after ingestion stops.
+Textual runs in the main process and owns the Hub process handle. The Hub owns the remaining service children. Loss of either Textual or the Hub ends the application session through their pipe. An operational child failure degrades only the capability it owns. Starting ingestion ensures that validation and transformation runs. Processing drains and stops after ingestion stops.
 
 See [Process Control](process-control.md) for IPC, identity, supervision, locking, request tracking, and shutdown behavior.
 
@@ -109,9 +109,9 @@ See [Pipeline and Data Flow](pipeline-data-flow.md) for ingestion, raw retention
 
 ## Product interfaces
 
-The Hub is the application orchestrator, control plane, and main process. The Textual child process is its terminal-facing control and operational-health interface. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
+The Hub is the application orchestrator and control plane. Textual runs in the main process as its terminal-facing control and operational-health interface. Streamlit provides analytical exploration in its own process. Spex exposes no structured headless commands.
 
-The `spex` command launches the orchestrator, which creates child control pipes and spawns Textual and the application services. TUI actions request service transitions through IPC. Closing the TUI requests shutdown of the complete application.
+The `spex` command launches Textual, which creates a control pipe and spawns the Hub. The Hub creates control pipes and spawns the operational services. TUI actions request service transitions through IPC. Closing the TUI closes the Hub pipe, causing complete application shutdown.
 
 ## Deployment and dependencies
 

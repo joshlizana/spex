@@ -1,5 +1,7 @@
 # Textual as an orchestrator spoke
 
+> Superseded outcome: runtime verification showed that a spawned multiprocessing child does not retain usable standard input for Textual. Spex now runs Textual in the main process and spawns the Hub as its non-daemonic control-plane child. The research below records the evaluated alternative.
+
 Research date: 2026-08-19
 
 ## Goal

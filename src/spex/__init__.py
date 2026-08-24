@@ -1,17 +1,16 @@
-import asyncio
-
 from spex.bootstrap import bootstrap_spex
-from spex.services.hub import Hub
+from spex.services.tui import Spex
 
 
-async def run_hub() -> None:
-    """Run the Spex Hub in an asynchronous context."""
-    async with Hub() as hub:
-        await hub.run()
+def start_spex() -> None:
+    """Bootstrap Spex and run its Textual control plane."""
+
+    with Spex() as app:
+        app.run()
 
 
 def main() -> None:
-    """Bootstrap Spex and run the Hub in the main process."""
+    """Bootstrap Spex and run its Textual control plane."""
 
     bootstrap_spex()
-    asyncio.run(run_hub())
+    start_spex()

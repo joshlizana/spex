@@ -6,15 +6,15 @@ This document defines application sessions, worker identity, IPC, supervision, l
 
 ## Ownership
 
-The `spex` console entry point launches a dedicated main-process orchestrator. It owns the application session, child lifecycles, control pipes, control messages, configuration, credentials, request state, logging, and aggregate health. Textual and every application service communicates only with this Hub for control.
+The `spex` console entry point launches Textual in the main process. Textual creates a duplex pipe, spawns the Hub, and retains its process handle. The Hub owns the application session, operational-service lifecycles, control pipes, control messages, configuration, credentials, request state, logging, and aggregate health. Textual and every application service communicates only with the Hub for control.
 
-The orchestrator creates Textual and every named service child with `multiprocessing.Process` under one explicit `spawn` context and retains each direct process handle. All application process spawning uses multiprocessing. Pool executors remain outside application orchestration.
+Textual creates the Hub with `multiprocessing.Process` under an explicit `spawn` context. The Hub uses the same start method for each named operational-service child and retains their direct process handles. Pool executors remain outside application orchestration.
 
-The orchestrator creates one duplex control pipe before spawning each child and passes one endpoint to it, retaining the other under its known role and process handle. Inside the TUI process, connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from a connection thread. Textual actions send operator intents to the orchestrator through this pipe.
+Textual creates its duplex Hub pipe and passes one endpoint during spawn. The Hub creates one pipe before spawning each operational child and retains the other endpoint under its known role and process handle. TUI connection reads cross Textual's thread-safe `post_message()` or `call_from_thread()` boundary and never mutate Textual objects from the connection thread. Textual actions send operator intents to the Hub through this pipe.
 
 Ingestion and processing never receive an application command on their pipe. They send advisory state and health telemetry to the Hub and detect Hub loss through EOF from a daemon monitor thread; the orchestrator retains authoritative lifecycle state in its process registry and stops a worker directly with `process.terminate()`.
 
-The TUI and the dashboard are long-lived processes with no bounded work cycle — the TUI blocks inside Textual's own event loop, and the dashboard has no cycle either. Neither can poll its pipe between cycles the way the workers do, so each uses a daemon monitor thread. The TUI needs an explicit `SIGTERM` handler that commands the app to exit directly, since it owns the terminal and an unhandled kill would leave it in a bad state. Textual's Linux driver clears `ISIG`, so Ctrl-C arrives as the input byte `\x03` and is ignored unless Spex binds it; no `SIGINT` reaches the TUI, Hub, or other foreground processes. The dashboard needs no signal handler because it is a read-only display with no in-flight state to protect. Its pipe carries Hub-loss detection and no application messages.
+The TUI and dashboard have no bounded work cycle — the TUI blocks inside Textual's main-process event loop, and the dashboard has no cycle either. Each uses a daemon pipe-monitor thread. Textual's Linux driver clears `ISIG`, so Ctrl-C arrives as the input byte `\x03` and is ignored unless Spex binds it; no `SIGINT` reaches the TUI, Hub, or other foreground processes. The dashboard needs no signal handler because it is a read-only display with no in-flight state to protect. Its pipe carries Hub-loss detection and no application messages.
 
 ## Resource ownership
 
@@ -34,7 +34,7 @@ The Hub identifies each service through the role, process handle, and pipe endpo
 
 ## IPC transport
 
-The orchestrator creates a dedicated `multiprocessing.Pipe(duplex=True)` for each child from the application `spawn` context. The orchestrator and child close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted child receives a new pipe.
+Textual creates the dedicated TUI-Hub `multiprocessing.Pipe(duplex=True)`. The Hub creates a dedicated pipe for each operational child. Each owner and child close their unused endpoint copies after spawning. EOF identifies peer loss. A restarted process receives a new pipe.
 
 The Hub retains each parent endpoint under the role and process handle it launched, so the pipe establishes transport identity without endpoint discovery or authentication. The Hub and the TUI exchange native Python dictionaries through `Connection.send()` and `Connection.recv()`. These methods use pickle and remain restricted to inherited pipes between Hub-created processes. Ingestion and processing send advisory telemetry but receive no application commands. Each worker monitors its connection from a daemon thread to detect Hub loss because the Hub sends nothing on that endpoint.
 
@@ -42,7 +42,7 @@ Every message contains a `type` and `payload`. A message includes a `message_id`
 
 ## Child readiness
 
-The TUI's first message carries its initial state and protocol version. The orchestrator associates it with the role and process handle recorded when launching it.
+The TUI's first message carries its initial state and protocol version. The Hub associates it with the dedicated pipe received from its Textual parent.
 
 The TUI becomes ready after the Hub accepts its initial state. Pipe creation and transfer occur as part of process creation and have no connection retry or hello acknowledgment.
 
@@ -66,13 +66,13 @@ Deferred in full for the walking skeleton: commands are one-off and fire-and-for
 
 ## Health and connection loss
 
-The Hub monitors every child's process sentinel and pipe endpoint. For ingestion and processing, pipe EOF means the Hub itself is gone — the only signal of Hub loss they have. The TUI and dashboard monitor their pipes from daemon threads. The TUI exits through Textual's thread-safe boundary on EOF; the dashboard ends its placeholder loop. Detecting a TUI that remains alive but stops responding is deferred with the rest of the command lifecycle below; the walking skeleton has no command timeouts.
+Textual monitors the Hub's pipe from a daemon thread and retains the Hub process handle. The Hub monitors the TUI pipe plus every operational child's process sentinel and pipe endpoint. For ingestion and processing, pipe EOF means the Hub itself is gone. The TUI exits through Textual's thread-safe boundary on Hub EOF; the dashboard ends its placeholder loop on Hub EOF. Detecting a peer that remains alive but stops responding is deferred with the rest of the command lifecycle below; the walking skeleton has no command timeouts.
 
-The Hub supervises from an `asyncio` loop in the main process, with no listener or handler threads. Each pass sweeps the service registry and branches on role: the TUI's endpoint is polled and received, driving command handling; ingestion and processing endpoints are drained for advisory telemetry; and every child is judged by its process sentinel. TUI loss ends the loop, through either pipe EOF or a dead sentinel, because Spex has no headless mode. Any other child's exit is joined and dropped, and supervision continues. Passes are separated by a fixed one-hundred-millisecond sleep.
+The Hub supervises from an `asyncio` loop in its own process, with no listener or handler threads. Each pass polls and receives the TUI endpoint, driving command handling, then judges every operational child by its process sentinel. TUI pipe EOF ends the loop because Spex has no headless mode. An operational child's exit is joined and dropped, and supervision continues. Advisory telemetry drainage remains deferred with its producers. Passes are separated by a fixed one-hundred-millisecond sleep.
 
 Blocking calls stay off the event loop. `multiprocessing` joins are synchronous, so every terminate/kill escalation runs through `asyncio.to_thread`, and application shutdown escalates all children concurrently under a single `asyncio.gather` rather than serially. The Hub is an async context manager: teardown awaits the join before releasing the process lock, so the lock outlives every child it supervises. A restarted child receives a new pipe under the standard worker-restart policy. Worker crash restart uses the standard retry policy and then waits for manual restart.
 
-Hub shutdown stops every child with `SIGTERM`/`process.terminate()` — the same call for all four child roles, though they act on it differently: ingestion and processing treat it as a flag checked between cycles, while the TUI and dashboard have no signal handler and terminate directly. Graceful TUI handling for this abnormal path remains deferred in `docs/TODO.md`. Every child then gets a flat fifteen-second wait if still alive, then kills and joins a process that still remains alive. This is a confirmed, documented exception to the standard retry policy below (one flat wait, not four escalating ones) — not a drift from it. It removes the process from its registry only after confirmed exit.
+Hub shutdown stops every operational child with `SIGTERM`/`process.terminate()`. Ingestion and processing treat it as a flag checked between cycles, while the dashboard terminates directly. Every child then gets a flat fifteen-second wait if still alive, followed by kill and join if it remains alive. This is a confirmed exception to the standard retry policy below. The Hub removes a process from its registry only after confirmed exit.
 
 ## Command lifecycle
 
@@ -84,7 +84,7 @@ Deferred in full, same basis as above — no ledger exists or is needed while co
 
 ## Process lock
 
-The Hub first acquires `hub.lock` in the per-user runtime directory. Child processes require no locks because the Hub creates them and retains their process handles.
+The Hub child acquires `hub.lock` in the per-user runtime directory. Operational-service children require no locks because the Hub creates them and retains their process handles.
 
 Linux and WSL use `fcntl.flock`. File existence never proves ownership.
 
@@ -92,11 +92,11 @@ The locked file stores JSON metadata containing the Hub PID and process start ti
 
 ## Replacement and orphan cleanup
 
-A new `spex` invocation that finds the Hub lock held forcibly terminates the existing main process before acquiring the lock. That termination reaches only the old Hub's specific PID, not its children — POSIX does not propagate a killed parent's signal to them. Closing the old Hub's pipe endpoints as it dies causes every child to see EOF through its monitor thread. Ctrl-C does not provide a process-group fallback while Textual has disabled `ISIG`; it is an ignored input byte unless Spex binds it. The active Hub supervises current-session children through retained process handles and uses forced termination after graceful shutdown fails.
+A new `spex` invocation whose Hub finds `hub.lock` held fails lock acquisition. Reporting that startup failure deterministically to the new Textual parent remains deferred with the Hub-ready handshake. If a Hub dies, its operational children observe pipe EOF and exit through their monitor threads; its Textual parent also observes EOF and exits through Textual's thread-safe boundary. Ctrl-C remains an ignored input byte while Textual disables `ISIG` unless Spex binds it.
 
 ## Application shutdown
 
-Closing the TUI sends an application-shutdown request to the orchestrator. The orchestrator stops every child — ingestion, processing, the TUI, and dashboard — with `SIGTERM`, joins each, and releases session resources. Unexpected TUI exit triggers the same application-shutdown policy because Spex has no headless operating mode. Unexpected orchestrator failure is visible to every child through pipe EOF from its monitor thread.
+Closing Textual closes its Hub endpoint and then joins the Hub process. Hub EOF stops ingestion, processing, and dashboard, joins them, releases the Hub lock, and exits. Unexpected Hub failure is visible to Textual and every operational child through pipe EOF from their monitor threads.
 
 ## Standard retry policy
 

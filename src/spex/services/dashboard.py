@@ -18,9 +18,9 @@ class DashboardService(SpawnProcess):
         """Run dashboard work, releasing the Hub pipe on exit."""
         pipe_thread = threading.Thread(target=self.pipe_thread, daemon=True)
         try:
-            # Run dashboard work.
             pipe_thread.start()
             try:
+                # Run dashboard work.
                 while not self._shutdown:
                     time.sleep(0.1)
             finally:

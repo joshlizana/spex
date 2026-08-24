@@ -1,5 +1,7 @@
 # Textual and multiprocessing spawn compatibility
 
+> Superseded outcome: Spex now runs Textual in the main process and spawns the Hub before entering the app. This preserves terminal input while keeping operational process creation outside Textual's event loop. The research below records the earlier failure and alternatives.
+
 Research date: 2026-08-19
 
 ## Goal

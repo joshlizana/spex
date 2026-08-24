@@ -17,7 +17,7 @@ The primary use case demonstrates an architecture that handles real-time streams
 ## Interfaces
 
 - A Textual terminal user interface sends operator commands, accepts and persists the Jetstream archive credential, and displays operational health.
-- The main-process Hub owns orchestration, IPC, application state, and shutdown.
+- The main-process Textual interface owns the terminal and the Hub process handle. The Hub owns orchestration, IPC, application state, and operational-service shutdown.
 - A Streamlit dashboard presents analytical views backed by the data mart.
 
 ## Deployment
@@ -53,8 +53,8 @@ The complete application runs five processes:
 - Streamlit dashboard
 - Textual terminal interface
 
-The Hub uses one runtime lock file to prevent multiple application instances. It
-owns and supervises every child process directly.
+The Textual main process spawns and monitors the Hub. The Hub uses one runtime
+lock file and directly owns the ingestion, processing, and dashboard children.
 
 Component boundaries support focused design and operation within the application.
 

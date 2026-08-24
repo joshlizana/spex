@@ -28,7 +28,7 @@ The `replay` phase consumes the sealed archive and includes all work before the 
 
 ### Consequences
 
-- Spex runs one ingestion child, one processing child, Textual, Streamlit, and the main-process Hub.
+- Spex runs Textual in the main process, a Hub child, and Hub-owned ingestion, processing, and Streamlit children.
 - Ingestion owns one raw writer, one durable sequence cursor, and one service-state artifact.
 - The TUI starts and stops ingestion and reports its `replay` or `live` phase.
 - Ingestion sends phase and health telemetry to the Hub while lifecycle commands remain signal-based.

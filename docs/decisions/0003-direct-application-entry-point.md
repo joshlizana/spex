@@ -10,28 +10,28 @@ Spex uses a dedicated orchestrator with Textual as its operational interface and
 
 - `spex` launches one interactive application.
 - The Textual interface owns operator controls and configuration.
-- The main-process orchestrator owns process orchestration without an argument parser.
+- The main-process Textual interface launches the Hub without an argument parser.
 - Spex does not require structured headless commands, shell completion, or command-specific option validation.
 
 ## Considered options
 
 - Use Typer for the application entry point and public subcommands.
 - Hand-build a command-line parser and orchestration interface.
-- Use a direct package entry point into the application orchestrator.
+- Use a direct package entry point into the Textual application.
 
 ## Decision outcome
 
-Chosen option: **Use a direct package entry point into the application orchestrator**, because Spex exposes one interactive application without a structured headless command interface.
+Chosen option: **Use a direct package entry point into the Textual application**, because Spex exposes one interactive application without a structured headless command interface.
 
 ### Consequences
 
 - The `spex` console script launches the application directly.
-- The orchestrator owns child processes, control connections, and lifecycle state.
-- Textual owns terminal interaction and sends operator actions through IPC.
+- Textual owns terminal interaction, the Hub process handle, and the TUI side of their control connection.
+- The Hub owns operational-service processes, control connections, and lifecycle state.
 - Typer is not a runtime dependency.
 - Spex defines no public ingestion, replay, processing, dashboard, or status subcommands.
 - A future command-line interface requires a new demonstrated product need and a separate decision.
 
 ### Confirmation
 
-Compliance requires Typer to be absent from runtime dependencies and `spex` to launch the orchestrator directly.
+Compliance requires Typer to be absent from runtime dependencies and `spex` to launch Textual directly without a CLI framework.

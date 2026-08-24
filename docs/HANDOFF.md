@@ -6,28 +6,28 @@ This document provides the current working context for the next agent. [`AGENTS.
 
 ## Current objective
 
-Complete the control-plane integration checkpoint on the consolidated ingestion architecture.
+Continue the walking-skeleton application behavior on the verified direct-pipe control plane.
 
 The ingestion service has exactly two phases: `replay` and `live`. The ATProto Python SDK's `atproto_jetstream.replay()` owns archive planning, decoding, cursor-based seam deduplication, and the transition to the WebSocket tail. Replay and live share one process, raw writer, durable cursor, and state artifact.
 
 ## Implemented structure
 
-- The Hub runs in the main process under an explicit multiprocessing `spawn` context.
-- The bare `spex` entry point bootstraps the filesystem, enters the Hub's async context, and runs supervision on one event loop.
+- Textual runs in the main process and owns the terminal, Hub process handle, and their direct pipe.
+- The bare `spex` entry point bootstraps the filesystem and enters the context-managed Textual/Hub lifecycle.
 - The Hub acquires the sole `hub.lock` and owns every child process handle.
 - `IngestionService` and `PipelineService` inherit `ServiceProcess`, which owns their shared pipe, daemon EOF-monitor thread, and signal lifecycle.
-- `SpexProcess` (tui.py) and `DashboardService` (dashboard.py) are their own `SpawnProcess` subclasses, not `ServiceProcess` — both are long-lived and non-cyclic, so they can't use the poll-a-flag-between-cycles pattern. Each monitors its pipe from a daemon thread. The TUI exits through Textual's thread-safe boundary on EOF; the dashboard sets its shutdown flag. Neither installs a signal handler. `DashboardService.run()` currently keeps a placeholder loop pending its real body in `docs/TODO.md` 0.7.
+- `Spex` owns the main-process Textual app and Hub child lifecycle. `DashboardService` is a long-lived `SpawnProcess`; both use daemon pipe-monitor threads. Hub EOF exits Textual through its thread-safe boundary, while dashboard EOF sets its shutdown flag.
 - The dashboard's pipe carries loss detection in both directions: the dashboard learns of Hub loss through pipe EOF, and the Hub learns of dashboard exit through the same endpoint and the process sentinel. It carries no application messages.
-- Every child receives a Hub-created duplex `multiprocessing.Pipe`. The TUI's is meant to carry control traffic. Under the new target, ingestion and processing send advisory telemetry but receive no commands; the current scaffolds have not implemented that telemetry yet. Workers monitor their pipe from a daemon thread to detect Hub loss through EOF.
+- Every operational child receives a Hub-created duplex `multiprocessing.Pipe`; Textual creates its own pipe before spawning the Hub. Ingestion and processing send advisory telemetry but receive no commands under the target design; the current scaffolds have not implemented that telemetry yet.
 - Pipe ownership supplies each child's identity; the TUI's control messages do not repeat session or instance identifiers.
-- `_spawn_service` creates each child's pipe pair, passes the child endpoint, and closes the unused copy. The four child roles are `ingest`, `pipeline`, `tui`, and `dashboard`.
-- The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass branches on role: the TUI's pipe is polled and received, driving `_handle_message`; workers are checked by process sentinel only. TUI loss ends the loop through pipe EOF or a dead sentinel; worker loss is joined and dropped without stopping the Hub. Every blocking join runs through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub is an async context manager (`__aenter__`/`__aexit__`), so `__aexit__` awaits `_join` before releasing the lock.
-- Worker scaffolds stop gracefully through `SIGTERM`/`SIGINT`, checked as a flag between cycles. The TUI exits normally through its own interface instead, and the Hub reads that child loss as its shutdown trigger. A `SIGTERM` handler calling `app.exit()` covers only the abnormal path and is tracked in `docs/TODO.md` 0.2, not this refactor. Dashboard needs no handler at all; termination without one is acceptable.
+- `_spawn_service` creates each operational child's pipe pair, passes the child endpoint, and closes the unused copy. The three Hub-owned roles are `ingest`, `pipeline`, and `dashboard`.
+- The Hub's supervision loop (`run()`) is an `asyncio` loop. `loop.add_signal_handler` records shutdown intent without touching teardown. Each pass polls the TUI pipe and checks operational-service sentinels. TUI EOF ends the loop; worker loss is joined and dropped without stopping the Hub. Blocking joins run through `asyncio.to_thread`, and `_join` escalates all children concurrently with `asyncio.gather`. The Hub context completes cleanup before releasing the lock.
+- Worker scaffolds stop gracefully through `SIGTERM`/`SIGINT`, checked as a flag between cycles. Textual exits through its interface, closes the Hub pipe, and joins the Hub. Dashboard needs no handler; termination without one is acceptable.
 - `_join_service` closes the pipe, then `terminate()` and a fifteen-second wait if still alive, then `kill()`.
 
 ## Resume point
 
-Entry-point step 10 is complete. The bare `spex` command bootstraps the filesystem, then runs supervision inside `async with Hub()`, ensuring the Hub lock and child cleanup share the event-loop lifecycle. Continue at step 12's integration checkpoint. No request ledger is needed for the walking skeleton.
+The control-plane refactor and integration checkpoint are complete. Continue in `docs/TODO.md` 0.2 with TUI operator intents, state exchange, real health, and the Hub-ready/error handshake. No request ledger is needed for the walking skeleton.
 
 Hub review findings, all resolved this session except (1):
 
@@ -44,17 +44,15 @@ Verified by test and worth remembering: `Connection.poll()` reports readability,
 
 Considered and declined for now: pre-spawning every worker at Hub startup and gating actual work with `pause`/`resume` to keep them "hot," avoiding process-spawn latency on a TUI-issued `start`. `_spawn_service`/`_join_service`'s existing construct-and-start-together, join-and-discard-on-stop lifecycle stays. Revisit only if operator-perceived start latency proves noticeably slow in practice.
 
-TUI and dashboard are long-lived, non-cyclic processes (`SpexProcess` blocks inside Textual's `app.run()`; dashboard has no bounded work cycle either), so neither uses the workers' pipe-EOF-poll pattern. The TUI exits through its own interface, and the Hub reads that child loss as its shutdown trigger. Verified this session: Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so while the TUI runs, Ctrl-C delivers a literal `\x03` byte to the TUI and no `SIGINT` to any process in the foreground group, including the Hub. Spex has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`. Exit through the interface is therefore the only normal shutdown path. Textual installs no `SIGTERM` or `SIGINT` handler of its own on this driver — only `SIGTSTP`, `SIGCONT`, `SIGWINCH`, and transiently `SIGTTOU`/`SIGTTIN`.
+TUI and dashboard are long-lived and non-cyclic, so both use pipe-monitor threads. Textual runs in the main process and exits through its interface; closing its pipe ends the Hub. Verified this session: Textual's Linux driver clears the `ISIG` termios flag by default (`drivers/linux_driver.py`, Textual 8.2.8), so Ctrl-C delivers a literal `\x03` byte to Textual and no `SIGINT` to the foreground process group. Spex has no binding for that byte, so it is ignored. `TEXTUAL_ALLOW_SIGNALS` restores `ISIG`.
 
-Remaining gap on the abnormal path: `Hub._join()` terminates every service including the TUI, so an external kill of the Hub or a supervisor exception sends the TUI an unhandled `SIGTERM` and leaves the terminal in raw mode with the alternate screen active. Tracked in `docs/TODO.md` 0.2 as TUI `SIGTERM` handling, by Joshua's decision that it is implementation rather than refactor scope. The same reasoning covers the PID-targeted-kill case, which orphans children because POSIX does not propagate a killed parent's signal.
+Remaining startup gap: the TUI-Hub protocol has no ready/error handshake. If the Hub fails before Textual enters its event loop, such as on lock contention, the TUI cannot yet report that failure deterministically. This remains in `docs/TODO.md` 0.2.
 
 Worker pipe monitoring now runs from a daemon thread, so Hub loss is detected during a work cycle. A send lock remains unnecessary until telemetry introduces concurrent sends.
 
 Scope decision, applied: `REFACTOR_TODO.md` covers control-plane mechanics only — process, pipe, and signal supervision. What a service does with its pipe is implementation and lives in `docs/TODO.md`. Step 9 is now the TUI transport wiring (9b) and its review (9c); its operator intents, background-worker state receipt, real health indicator, and Textual-closure shutdown intent moved out, since `docs/TODO.md` 0.2 already covers all four. Step 12 keeps the mechanical confirmations and drops the bidirectional-message check as feature verification.
 
-Remaining refactor sequence:
-
-1. Run step 12's integration checkpoint and reconcile `docs/TODO.md`, the design documents, and `CHANGELOG.md`.
+The control-plane refactor sequence is complete.
 
 ## Confirmed boundaries
 
@@ -71,7 +69,7 @@ Remaining refactor sequence:
 - All ten source modules import successfully under the project environment.
 - A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
-- Worker and dashboard integration passes: the Hub assigns three distinct pipes, closes and joins all three services, releases its lock, and each child detects Hub EOF with a readable sentinel and code-zero exit. The real `spex` PTY check exposes the remaining blocker: Python's spawned child has closed standard input, so Textual raises `ValueError` at `sys.__stdin__.fileno()` before mounting. The Hub observes that exit, cleans up, and returns code zero.
+- Full integration passes: the Hub starts all three operational services through TUI messages, stops and restarts pipeline, then closes and joins every child on TUI EOF with code zero. A real PTY `spex` run starts Textual in the main process and exits the complete application through `q` with code zero.
 
 ## Primary references
 
