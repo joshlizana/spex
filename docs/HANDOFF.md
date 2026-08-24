@@ -64,7 +64,7 @@ Remaining refactor sequence:
 
 - Joshua owns all application behavior and implements review fixes.
 - Agents own documentation, comments, docstrings, formatting, research, code review, and repository lifecycle.
-- Tests run only when Joshua requests them.
+- Small, targeted checks are authorized when proportionate. Ask Joshua before writing substantial throwaway scripts, broad test harnesses, or large test suites.
 - Reviews address implemented scope and established failure boundaries without treating deferred features as current defects.
 - The standard retry policy uses four delays: 1, 2, 4, and 8 seconds.
 - Linux and WSL are the supported platforms.
