@@ -34,12 +34,12 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Complete the TUI readiness, pipe-loss, and exit lifecycle.
 - [x] Add a Hub ready/error handshake so Textual reports lock contention and other startup failures deterministically.
 - [ ] Handle `SIGTERM` in the TUI process with a handler that exits the Textual app so an abnormal Hub shutdown restores the terminal.
-- [ ] Start ingestion, processing, and dashboard automatically after Hub readiness and configuration validation.
+- [x] Start ingestion, processing, and dashboard automatically before the Hub reports readiness.
 - [ ] Show ingestion's `replay` or `live` phase.
-- [ ] Keep validation and transformation active for the application lifetime with ingestion.
+- [x] Keep validation and transformation active for the application lifetime with ingestion.
 - [x] Launch the Hub and every operational child with `multiprocessing.Process` and retain each process handle at its ownership boundary.
 - [x] Monitor Hub-owned child pipe endpoints independently of Textual.
-- [ ] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
+- [x] Retain each parent pipe endpoint under the role and process instance launched by the Hub.
 - [x] Define the minimal readiness, state, and health messages needed by the slice.
 - [ ] Define worker telemetry envelopes and Hub state aggregation.
 - [ ] Drain worker telemetry in the Hub and forward service-state snapshots or updates to Textual.

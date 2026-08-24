@@ -35,6 +35,7 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Define M0 service state through `running` and `paused` booleans, with inactive state taking precedence.
 - Route child-process logs to the orchestrator and let Textual read the persisted combined log.
 - Add a Hub ready/error handshake so Textual reports startup failure before entering its event loop.
+- Start ingestion, processing, and dashboard automatically before the Hub reports readiness.
 
 ### Changed
 

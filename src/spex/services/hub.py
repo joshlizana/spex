@@ -76,6 +76,16 @@ class Hub:
     async def __aenter__(self):
         self._lock = HubLock()
         self._lock.acquire()
+        try:
+            for role in SERVICE_TYPES:
+                self._spawn_service(role)
+        except BaseException:
+            try:
+                if self._services:
+                    await self._join()
+            finally:
+                self._lock.release()
+            raise
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):

@@ -52,7 +52,7 @@ The TUI exposes no service-lifecycle messages. Closing Textual requests applicat
 
 An invalid readiness message or protocol mismatch closes the TUI pipe and reports startup failure. After readiness, an invalid state message closes the connection and marks the TUI degraded. IPC has no application-defined message-size limit while the endpoint remains an inherited local boundary.
 
-The walking skeleton implements the initial `ready` or `error` exchange and waits for it before entering Textual. The current `ready` message has no payload and is sent after lock acquisition but before operational-service startup; the protocol version, initial state, and final readiness boundary remain part of the state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
+The walking skeleton implements the initial `ready` or `error` exchange and waits for it before entering Textual. The Hub acquires its lock and starts every operational service before sending the current payload-free `ready` message. The protocol version and initial state remain part of the state contract. No command identity or request ordering is required because the TUI sends no lifecycle commands.
 
 ## Health and connection loss
 
