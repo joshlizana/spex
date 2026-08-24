@@ -27,7 +27,7 @@ The ingestion service has exactly two phases: `replay` and `live`. The ATProto P
 
 ## Resume point
 
-The control-plane refactor and integration checkpoint are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 by implementing the agreed state and telemetry exchange, then connect it to real TUI health. No request ledger is needed.
+The control-plane refactor, worker telemetry, and Hub aggregation are complete. Joshua has decided that every operational service starts with the Hub and the TUI exposes no service-lifecycle controls. Continue in `docs/TODO.md` 0.2 by receiving `state` and `telemetry` through Textual's thread-safe boundary and replacing the placeholder health indicator. No request ledger is needed.
 
 Hub review findings are resolved. `_join_service`'s blocking terminate/kill escalation runs through `asyncio.to_thread`, and `_join` overlaps every child's escalation under one `asyncio.gather`. `run()` owns supervision on one event loop; signal handlers only record shutdown intent, and the Hub context completes child cleanup before releasing the lock.
 
@@ -37,7 +37,7 @@ Steps 1 through 8 in `REFACTOR_TODO.md` contain the completed direct-pipe work. 
 
 Verified by test and worth remembering: `Connection.poll()` reports readability, not EOF specifically. A worker's bare poll remains sound while the Hub sends it no messages; worker-to-Hub telemetry does not make the worker endpoint readable. The Hub must receive telemetry explicitly and treat `EOFError` as child loss.
 
-The Hub starts ingestion, pipeline, and dashboard while entering its lock-and-cleanup context, then reports `ready` to Textual. Partial startup failure joins every child already registered and releases the Hub lock before propagating an error. The next implementation step removes the transitional `start` and `stop` handler, drains worker state and telemetry, and forwards role-keyed payloads to Textual. Textual provides configuration and operational visibility without start, stop, pause, resume, or manual-restart controls.
+The Hub starts ingestion, pipeline, and dashboard while entering its lock-and-cleanup context, then reports `ready` to Textual. Partial startup failure joins every child already registered and releases the Hub lock before propagating an error. The Hub drains worker state and telemetry and forwards role-keyed payloads to Textual. The next implementation step consumes those messages in Textual and displays real service state and metrics without start, stop, pause, resume, or manual-restart controls.
 
 The normal Hub-to-TUI messages are `ready`, change-driven `state`, and 250-millisecond `telemetry`; `error` is the startup alternative to `ready`, and pipe EOF reports connection loss. Readiness contains the complete initial `services` state mapping and no protocol version. Each worker calculates its named metrics, publishes fresh immutable snapshots, and lets the base telemetry reporter remain the sole pipe writer. The Hub identifies the role from the pipe, preserves the role-specific payload unchanged, and only synthesizes or overrides `running` from authoritative process liveness. Hub loss closes Textual; a later invocation creates a clean session rather than restarting the Hub in place.
 
@@ -71,6 +71,7 @@ The control-plane refactor sequence is complete.
 - A temporary-path lock probe acquires the Hub lock, rejects a concurrent owner, and releases it.
 - Control-plane source contains no imports of the removed listener or generic IPC client.
 - Control-plane integration passes for the implemented transport scaffold and shutdown lifecycle. Joshua verified that a real `spex` run starts all operational services and exits through `q` with code zero and no Spex process left behind. Source compilation and whitespace validation pass with automatic startup.
+- A bounded pipeline-cycle probe exits normally and publishes the expected cumulative `records_processed` and rolling `records_per_second` payload.
 - The managed Codex sandbox rejects local `socket.send()` with `EPERM`, which prevents asyncio's cross-thread self-pipe wakeup and makes `asyncio.to_thread()` checks hang after their functions return. Run Hub integration checks with approved unsandboxed execution; normal Linux and WSL runs do not exhibit this sandbox behavior.
 
 ## Primary references
