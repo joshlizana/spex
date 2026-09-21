@@ -26,10 +26,10 @@ class IngestionService(ServiceProcess):
         )
         telemetry_thread.start()
 
-        # Keep the scaffold alive while the service is running.
         self._events_received += 1
         self._events_received_past_ten_seconds.append(time.time())
         self._throughput()
+        # Pace the scaffold's synthetic event rate.
         time.sleep(0.1)
         # Join the telemetry thread after this bounded work cycle completes.
         self._cycle_stop = True

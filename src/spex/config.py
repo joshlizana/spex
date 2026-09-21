@@ -55,6 +55,7 @@ class ConfigSchema(BaseModel):
         dirs = platformdirs.PlatformDirs("spex", ensure_exists=True)
         return dirs.user_state_path
 
+
 class SpexConfig:
     """Load, validate, and atomically persist Spex configuration."""
 
@@ -62,7 +63,6 @@ class SpexConfig:
         self._lock = threading.Lock()
         self._config_file: Path = Path(platformdirs.PlatformDirs("spex", ensure_exists=True).user_config_path) / "config.json"
         self._config: ConfigSchema = self._load_config()
-
 
     @property
     def config(self) -> ConfigSchema:
@@ -89,7 +89,6 @@ class SpexConfig:
 
         return config
 
-
     def _save_config(self, config_copy: ConfigSchema) -> None:
         """Atomically replace the persisted configuration with a candidate."""
         if not self._config_file.parent.exists():
@@ -108,7 +107,6 @@ class SpexConfig:
                 tmp_file.unlink(missing_ok=True)
             except OSError:
                 pass
-
 
     def update(self, **kwargs) -> None:
         """Validate, persist, and publish a complete configuration update."""

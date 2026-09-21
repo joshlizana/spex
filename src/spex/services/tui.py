@@ -50,7 +50,7 @@ class Spex:
             self._hub_process.join()
 
     def run(self) -> None:
-        """Run the Spex TUI until it exits, releasing the Hub pipe afterward."""
+        """Run the Spex TUI until it exits, then signal the pipe monitor to stop."""
 
         try:
             self._app.run()

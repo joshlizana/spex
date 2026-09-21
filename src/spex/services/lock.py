@@ -60,7 +60,7 @@ class HubLock:
             self._close_lock()
 
     def write_metadata(self) -> None:
-        """Write metadata to the lock file."""
+        """Write the Hub PID and process start time, closing the lock on failure."""
 
         try:
             if self._lock_fd is not None:

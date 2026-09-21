@@ -8,7 +8,7 @@ SpawnProcess = get_context("spawn").Process
 
 
 class ServiceProcess(SpawnProcess):
-    """Provide shared process lifecycle and Hub control for worker services."""
+    """Provide the shared process, pipe, and signal lifecycle for worker services."""
 
     def __init__(self, pipe: connection.Connection):
         super().__init__()
@@ -38,7 +38,10 @@ class ServiceProcess(SpawnProcess):
             self._pipe.close()
 
     def _reporter(self) -> None:
-        """Send a telemetry report to the Hub."""
+        """Report telemetry every 250 milliseconds and state on each phase change.
+
+        This thread is the service's sole pipe writer, so it needs no send lock.
+        """
         while not self._shutdown:
             phase = self._phase
             if self._telemetry_snapshot is not None:

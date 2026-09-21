@@ -23,6 +23,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Define the exact M0 data, configuration, and runtime paths beneath the resolved `platformdirs` roots.
 - [x] Bootstrap the accepted directory tree before starting application processes.
 - [ ] Validate M0 path creation and isolation on Linux and WSL.
+- [ ] Check in a ruff configuration recording the project's rule selection and line length.
 
 #### 0.2 Establish the minimal control plane
 
@@ -44,6 +45,9 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [x] Define worker telemetry envelopes and Hub state aggregation.
 - [x] Drain worker telemetry in the Hub and forward service-state snapshots or updates to Textual.
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
+- [ ] Report Hub loss deterministically when it occurs before Textual's event loop exists or after it closes.
+- [ ] Join the Hub telemetry reporter before closing the Hub pipe so no send follows the close.
+- [ ] Decouple the worker cycle period from the telemetry snapshot interval.
 - [ ] Show actual child-process and connection state in the Textual status view.
 - [x] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
 
@@ -203,6 +207,9 @@ Resolve these items when their roadmap increment becomes active.
 
 - [x] Define the application-data, configuration, runtime, raw-data, dataset, benchmark, and log paths resolved through `platformdirs`.
 - [ ] Define configuration persistence and validation boundaries.
+- [ ] Leave the same on-disk state after corrupt-configuration recovery as after first-run creation.
+- [ ] Remove directory-creation side effects from configuration path reads and give directory creation one owner.
+- [ ] Confirm that `runtime_dir` creation succeeds for a non-root user on WSL without systemd.
 - [ ] Define service health, metrics, logging, and tracing conventions.
 - [x] Select centralized orchestrator logging through an unbounded multiprocessing queue and one listener thread.
 - [x] Select one combined JSON Lines application log with hourly rotation.
@@ -248,6 +255,9 @@ Resolve these items when their roadmap increment becomes active.
 - [ ] Test connection-bound service identity, health display, and log correlation.
 - [ ] Test one pipe per process instance and fresh-pipe creation on restart.
 - [ ] Test pipe loss and degraded status.
+- [ ] Derive `running` in the Hub from the process handle rather than the worker's reported value.
+- [ ] Decide whether the base service reporter assembles worker state or sends a subclass-supplied payload.
+- [ ] Decide whether an invalid worker message degrades one service or ends the session.
 - [ ] Review pickle trust and the absence of an IPC message-size limit if the inherited-pipe boundary changes.
 
 ## 3. Test-data and profiling foundation

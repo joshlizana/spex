@@ -40,9 +40,12 @@ The format follows [Keep a Changelog 2.0](https://keepachangelog.com/en/2.0.0/),
 - Apply persisted configuration changes, including retention changes, on the next application start.
 - Add role-keyed worker state and telemetry forwarding with automatic replacement after child-process loss.
 - Add cumulative record count and ten-second throughput telemetry to the pipeline scaffold.
+- Add a walking-skeleton control-plane code review covering all ten source modules.
 
 ### Changed
 
+- Align docstrings in `start_spex`, `Spex.run`, `ServiceProcess`, both reporters, `HubProcess._run_hub`, and `HubLock.write_metadata` with current behavior.
+- Place the scaffold pacing comment above the sleep it describes in both worker services.
 - Consolidate live ingestion and historical backfill into one ingestion service with `replay` and `live` phases.
 - Select `atproto_jetstream.replay()` to own Jetstream v2 archive planning, decoding, seam deduplication, and the transition to the live tail.
 - Reduce the target topology from five child services to four and use one raw writer, durable cursor, and ingestion state artifact.

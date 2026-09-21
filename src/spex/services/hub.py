@@ -44,7 +44,10 @@ class HubProcess(SpawnProcess):
         asyncio.run(self._run_hub())
 
     async def _run_hub(self) -> None:
-        """Run the Spex Hub supervision loop."""
+        """Start the Hub, report readiness to the TUI, and supervise until shutdown.
+
+        A failure before readiness is reported to the TUI as an ``error`` message.
+        """
         self._hub = Hub(pipe=self._pipe)
         ready = False
 
@@ -185,7 +188,7 @@ class Hub:
         await self._join()
 
     def _reporter(self) -> None:
-        """Send a telemetry report to the TUI."""
+        """Report aggregated telemetry every 250 milliseconds and state on change."""
         reported_state = deepcopy(self._current_state)
         while self._running:
             self._pipe.send(deepcopy(self._current_telemetry))

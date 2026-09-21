@@ -27,9 +27,8 @@ class PipelineService(ServiceProcess):
         telemetry_thread.start()
         self._records_processed += 1
         self._records_processed_past_ten_seconds.append(time.time())
-
-        # Keep the scaffold alive while the service is running.
         self._throughput()
+        # Pace the scaffold's synthetic record rate.
         time.sleep(0.1)
         self._cycle_stop = True
         telemetry_thread.join()
