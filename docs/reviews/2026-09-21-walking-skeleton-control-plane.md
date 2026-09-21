@@ -12,7 +12,7 @@ Review date: 2026-09-21
 
 The control plane holds together: lock acquisition, spawn-time pipe transfer, the readiness handshake, EOF-driven shutdown, and concurrent join escalation all behave as `docs/design/process-control.md` specifies. Three defects are demonstrated rather than theoretical.
 
-Findings 1 through 3 are the priority. Finding 1 breaks the documented "Hub loss closes Textual" contract inside a real window. Finding 2 leaks a thread past the pipe close and swallows the resulting `OSError`. Finding 3 makes every worker cycle run at 2.5 times its intended period and churns one thread per cycle.
+Findings 1 through 3 are the priority. Finding 1 breaks the documented "Hub loss closes Textual" contract inside a real window. Finding 2 leaks a thread past the pipe close and swallows the resulting `OSError`. Finding 3 is a contract gap rather than a present bug: the shutdown flag is tested only between work cycles, which stops working once cycles become long-lived, as the ingestion design requires.
 
 Findings 4 through 6 are latent: the worker `state` path is dead code today, so its contract mismatches do not yet produce wrong behavior.
 
@@ -22,7 +22,7 @@ Findings 4 through 6 are latent: the worker `state` path is dead code today, so 
 - Pydantic 2.13.4 accepts both `model_validate(..., extra="forbid")` and `model_dump(exclude_computed_fields=True)`. `config.py` uses both correctly.
 - `App.call_from_thread` raises `RuntimeError("App is not running")` before `App.run()` because `App._loop` is `None`. Textual 8.2.8 does not reset `_loop` to `None` after `run()` returns; it leaves a closed loop, so the same call from a non-app thread raises `RuntimeError("Event loop is closed")`.
 - A probe mirroring `Hub._reporter`, `reporter.cancel()`, and `Hub.__aexit__`'s pipe close reproduces `OSError: handle is closed` in the reporter thread. The awaiting task is already cancelled, so the exception is discarded.
-- Driving `IngestionService._run_cycle` directly measures 12 cycles in 3.005 seconds, or 0.250 seconds per cycle, against a 0.100-second sleep budget.
+- Driving `IngestionService._run_cycle` directly measures 12 cycles in 3.005 seconds, or 0.250 seconds per cycle, against a 0.100-second sleep budget. The excess is the join waiting on the snapshot thread's sleep, and it amortizes away once cycles are long-lived.
 - `_spawn_service` performs one initial attempt and four retries with 1, 2, 4, and 8-second delays, matching the standard retry policy.
 - `/run/user` is `drwxr-xr-x root:root`, so creating `/run/user/<uid>` requires root.
 - Ruff 0.16.4 (`E,W,F,B,SIM,RUF`, preview) reports 26 findings. The project checks in no lint configuration.
@@ -45,13 +45,13 @@ Findings 4 through 6 are latent: the worker `state` path is dead code today, so 
 - Evidence: A probe reproducing the exact sequence reports `OSError: handle is closed` from the reporter thread with `task.cancelled()` true. Two causes compound: cancellation does not stop the thread, and the post-sleep `send` at line 198 never rechecks `self._running`.
 - Discussion: `ServiceProcess.run` already solves this correctly at `service.py:34-38` by setting `_shutdown`, joining both threads, and only then closing the pipe. The Hub needs the same ordering guarantee. The required outcome is that no send can follow the pipe close.
 
-### [High] The per-cycle telemetry thread inflates every worker cycle to 250 milliseconds
+### [High] A long-lived work cycle cannot observe the shutdown flag
 
-- Location: `src/spex/services/ingest.py:36`, `src/spex/services/pipeline.py:34`
-- Category: performance
-- Impact: `_run_cycle` sleeps 0.1 seconds, sets `_cycle_stop`, then joins the snapshot thread. That thread observes `_cycle_stop` only after its own `time.sleep(0.25)` returns, so the join blocks a further 0.15 seconds. Each cycle costs 0.250 seconds instead of 0.100, and the scaffold creates and destroys one thread every cycle. The thread also serves no purpose within a cycle: it writes exactly one snapshot before sleeping past the cycle's end.
-- Evidence: Driving `_run_cycle` directly measures 0.250 seconds per cycle across 12 cycles.
-- Discussion: The snapshot is a two-field dict built from attributes the cycle already owns. The required outcome is that the cycle runs at its intended period and the snapshot stays current within the documented 250-millisecond staleness budget. Consider whether the per-cycle thread is needed at all, or whether one long-lived snapshot thread per service, started alongside the base reporter, fits the documented design better.
+- Location: `src/spex/services/service.py:30`
+- Category: design
+- Impact: `run()` tests `_shutdown` only between cycles. Work cycles are long-lived by design: `atproto_jetstream.replay()` and the live tail each run far longer than the Hub's fifteen-second escalation window. `SIGTERM` then sets a flag nothing reads until the cycle returns on its own, so `_join_service` exhausts its wait and reaches `kill()`. Every shutdown becomes a `SIGKILL`, and a worker holding a raw writer or a durable cursor loses its chance to close them.
+- Evidence: `service.py:30-32` checks the flag between calls to `_run_cycle`. `hub.py:_join_service` terminates, waits fifteen seconds, then kills. `process-control.md` states that "a shared `ServiceProcess` handler catches the signal and ends the worker's current work cycle gracefully before exit", which holds only while a cycle is short.
+- Discussion: The required outcome is that a long-lived cycle observes shutdown without waiting to return. That places the real check inside `_run_cycle` at its own natural boundary, per event or per batch, and makes the base loop's test a backstop rather than the mechanism. Worth settling before ingestion lands in TODO 0.4, because it defines the `_run_cycle` contract every service inherits.
 
 ### [Medium] The Hub stores the worker's self-reported `running` verbatim
 
@@ -148,6 +148,14 @@ Findings 4 through 6 are latent: the worker `state` path is dead code today, so 
 - Impact: `_reporter` captures `_phase` at the top of the iteration and compares it after the sleep. Coverage is continuous across iterations, so the logic is correct, but the correctness depends on where the read sits relative to the sleep, which is easy to break during later edits.
 - Evidence: `service.py:46` reads the phase; `service.py:55` compares it after `time.sleep(0.25)`.
 - Discussion: `Hub._reporter` solves the same problem more directly with a `reported_state` variable updated after each send. The required outcome is that the comparison survives reordering.
+
+### [Low] The snapshot thread's lifetime is tied to the cycle rather than the process
+
+- Location: `src/spex/services/ingest.py:23`, `src/spex/services/pipeline.py:23`
+- Category: design
+- Impact: Each cycle creates, stops, and joins a snapshot thread through a second `_cycle_stop` flag, while `_reporter` already runs for the process lifetime. Long-lived cycles make the per-cycle cost negligible, so this is structure rather than performance: two flags govern one thread's life, and the join adds up to 250 milliseconds at each cycle boundary because `_telemetry_snap` rechecks `_cycle_stop` only after its own sleep returns.
+- Evidence: Driving the scaffold's `_run_cycle` directly measures 0.250 seconds per cycle against its 0.100-second sleep budget; the excess is the join waiting on the snapshot thread's sleep. The scaffold's short cycles expose this; real cycles amortize it away.
+- Discussion: Metric attributes are cumulative across cycles, so a process-lifetime snapshot thread started beside `_reporter` would drop `_cycle_stop` entirely. Keep the per-cycle thread if a later phase needs a different snapshot shape per cycle.
 
 ### [Low] Throughput divides by a fixed ten-second window during warm-up
 

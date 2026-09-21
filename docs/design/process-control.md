@@ -28,6 +28,8 @@ M0 represents each worker (ingestion and processing) with one field: `running`. 
 
 The Hub starts ingestion, processing, and dashboard during application startup. Ingestion starts in `replay` when archive access is available and transitions to `live` through the SDK; live-only operation starts in `live`. Services run for the application lifetime. The Hub stops a worker with `process.terminate()` (`SIGTERM`) during application shutdown. A shared `ServiceProcess` handler catches the signal and ends the worker's current work cycle gracefully before exit.
 
+Unresolved: work cycles are long-lived, and `ServiceProcess.run` tests the shutdown flag only between cycles. A cycle that outlasts the Hub's fifteen-second escalation window is killed rather than ended gracefully. Where a long-lived cycle observes the flag is open, and it defines the `_run_cycle` contract every service inherits.
+
 ## Process identity
 
 The Hub identifies each service through the role, process handle, and pipe endpoint stored in its process registry. Session and instance identifiers remain outside the walking-skeleton control contract.

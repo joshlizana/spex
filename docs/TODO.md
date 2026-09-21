@@ -47,7 +47,7 @@ This deliberately thin slice proves both ingestion phases with one replayed post
 - [ ] Return IPC state changes through Textual's `post_message()` or `call_from_thread()` boundary.
 - [ ] Report Hub loss deterministically when it occurs before Textual's event loop exists or after it closes.
 - [ ] Join the Hub telemetry reporter before closing the Hub pipe so no send follows the close.
-- [ ] Decouple the worker cycle period from the telemetry snapshot interval.
+- [ ] Define how a long-lived `_run_cycle` observes the shutdown flag before the Hub's fifteen-second kill deadline.
 - [ ] Show actual child-process and connection state in the Textual status view.
 - [x] Treat Textual closure as an application-shutdown request and stop all children through the orchestrator.
 
